@@ -11,11 +11,9 @@ export default function App() {
   const [modelsReady, setModelsReady] = useState(false);
   const [result, setResult] = useState(null);
   const [chainRefresh, setChainRefresh] = useState(0);
-  const [searchConfigured, setSearchConfigured] = useState(false);
 
   useEffect(() => {
     loadFaceModels().then(() => setModelsReady(true)).catch(console.error);
-    fetch(`${API_BASE}/api/health`).then(r => r.json()).then(d => setSearchConfigured(Boolean(d.searchConfigured))).catch(() => {});
   }, []);
 
   return (
@@ -24,13 +22,10 @@ export default function App() {
       <div className="notice">
         <strong>Pipeline:</strong> face detected → image searched on the public web → top matching sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
-      {!searchConfigured && (
-        <div className="config-warning">Set <code>SERPAPI_API_KEY</code> in <code>backend/.env</code> before running the live web-search demo.</div>
-      )}
 
       <section className="hero-section">
         <div className="section-head"><span className="section-num">01</span><h2>Face verification & web evidence</h2></div>
-        <p className="section-desc">Choose a face photo or take one with the camera. Proofmark detects one face locally, performs a genuine reverse-image search, shows up to three public matches, and records the discovered evidence.</p>
+        <p className="section-desc">Choose a face photo or take one with the camera. Nigrani detects one face locally, performs a genuine reverse-image search, shows up to three public matches, and records the discovered evidence.</p>
         <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} onComplete={(data) => { setResult(data); setChainRefresh(n => n + 1); }} />
       </section>
 
