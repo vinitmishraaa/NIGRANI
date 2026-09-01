@@ -5,7 +5,8 @@ import SearchPanel from "./components/SearchPanel.jsx";
 import ChainExplorer from "./components/ChainExplorer.jsx";
 import { loadFaceModels } from "./faceEngine.js";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+// Production backend; VITE_API_BASE can override this for local/dev use.
+const API_BASE = import.meta.env.VITE_API_BASE || "https://nigrani-backend-8bfx.onrender.com";
 
 export default function App() {
   const [modelsReady, setModelsReady] = useState(false);
