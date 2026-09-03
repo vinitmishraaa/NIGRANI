@@ -7,11 +7,21 @@ import { loadVisionModels } from "./faceEngine.js";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "https://nigrani-backend-8bfx.onrender.com";
 
+function getDeviceId() {
+  const key = "nigrani-device-id";
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const id = globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  localStorage.setItem(key, id);
+  return id;
+}
+
 export default function App() {
   const [modelsReady, setModelsReady] = useState(false);
   const [modelError, setModelError] = useState("");
   const [result, setResult] = useState(null);
   const [chainRefresh, setChainRefresh] = useState(0);
+  const [deviceId] = useState(() => getDeviceId());
 
   useEffect(() => {
     let active = true;
@@ -28,43 +38,40 @@ export default function App() {
         <strong>Pipeline:</strong> subject detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
       {modelError && <div className="config-warning">Vision model error: {modelError}</div>}
-
       <section className="hero-section">
         <div className="section-head"><span className="section-num">01</span><h2>Web image search &amp; evidence</h2></div>
         <p className="section-desc">Upload a person or supported living-being image. Nigrani detects the subject locally, uses face encoding when a human face is visible, searches the public web for exact or relevant image matches, and records the discovered evidence.</p>
-        <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} onComplete={(data) => { setResult(data); setChainRefresh(n => n + 1); }} />
+        <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} deviceId={deviceId} onComplete={(data) => { setResult(data); setChainRefresh(n => n + 1); }} />
       </section>
-
       {result && (
         <section className="section">
           <div className="section-head"><span className="section-num">02</span><h2>Evidence fingerprint</h2></div>
           <p className="section-desc">Each discovered source is turned into an evidence record, fingerprinted with SHA-256, and written to the tamper-evident chain. Optional EVM testnet anchoring can store the same fingerprint in a public transaction.</p>
-          <EvidenceVerification apiBase={API_BASE} result={result} />
+          <EvidenceVerification apiBase={API_BASE} result={result} deviceId={deviceId} />
         </section>
       )}
-
       <section className="section">
         <div className="section-head"><span className="section-num">03</span><h2>Blockchain explorer</h2></div>
-        <p className="section-desc">This panel shows the evidence blocks created by the demo and whether the local chain is still intact.</p>
-        <ChainExplorer apiBase={API_BASE} refreshKey={chainRefresh} />
+        <p className="section-desc">This panel shows the evidence blocks for this browser/device. The latest 10 records are shown first; older records stay collapsed until expanded.</p>
+        <ChainExplorer apiBase={API_BASE} refreshKey={chainRefresh} deviceId={deviceId} />
       </section>
       <Footer />
     </div>
   );
 }
 
-function EvidenceVerification({ apiBase, result }) {
+function EvidenceVerification({ apiBase, result, deviceId }) {
   const [state, setState] = useState({ loading: true });
   useEffect(() => {
     fetch(`${apiBase}/api/verify-evidence`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Device-Id": deviceId },
       body: JSON.stringify({ recordHash: result.recordHash, evidence: result.evidence }),
     })
       .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || "verification failed"); return d; })
       .then(d => setState({ loading: false, ...d }))
       .catch(e => setState({ loading: false, error: e.message }));
-  }, [apiBase, result]);
+  }, [apiBase, result, deviceId]);
   if (state.loading) return <div className="panel">Re-verifying evidence fingerprint…</div>;
   if (state.error) return <div className="panel status-line error">{state.error}</div>;
   return <div className={`panel verification-panel ${state.verified ? "verified" : "failed"}`}>
