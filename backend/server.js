@@ -31,6 +31,7 @@ function normalizeEvidence(result) {
     snippet: result.snippet,
     date: result.date,
     exactMatch: result.exactMatch,
+    matchType: result.matchType || (result.exactMatch ? "Exact match" : "Relevant visual match"),
   };
 }
 
@@ -54,6 +55,7 @@ app.post("/api/search", async (req, res) => {
     const imageHash = sha256(buffer);
     const search = await reverseSearchImage(buffer, mimeType);
 
+    // Exact sources are ranked first; if none exist, relevant visual sources are used as fallback.
     const evidence = search.results.slice(0, 3).map(normalizeEvidence);
     const record = {
       type: "web-evidence",
@@ -61,6 +63,7 @@ app.post("/api/search", async (req, res) => {
       descriptorHash: descriptorHash || null,
       searchProvider: search.provider,
       searchId: search.searchId,
+      exactMatchCount: search.exactMatchCount || 0,
       resultCount: evidence.length,
       evidence,
       capturedAt: new Date().toISOString(),
@@ -83,7 +86,7 @@ app.post("/api/search", async (req, res) => {
       success: true,
       faceDetected: true,
       imageHash,
-      search: { provider: search.provider, searchId: search.searchId, results: evidence },
+      search: { provider: search.provider, searchId: search.searchId, exactMatchCount: search.exactMatchCount || 0, results: evidence },
       evidence,
       recordHash,
       block: { index: block.index, hash: block.hash, previousHash: block.previousHash, timestamp: block.timestamp },
@@ -136,7 +139,7 @@ app.get("/api/chain", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Proofmark backend listening on http://localhost:${PORT}`);
+  console.log(`NIGRANI backend listening on http://localhost:${PORT}`);
   console.log(`Web search configured: ${Boolean(process.env.SERPAPI_API_KEY)}`);
   console.log(`On-chain testnet anchoring configured: ${isOnchainConfigured()}`);
 });
