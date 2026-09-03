@@ -45,9 +45,12 @@ app.get("/api/health", (req, res) => {
 
 app.post("/api/search", async (req, res) => {
   try {
-    const { imageData, livingDetected, subjectType, faceDetected, descriptorHash } = req.body;
+    const { imageData, subjectType, faceDetected, descriptorHash } = req.body;
     if (!imageData) return res.status(400).json({ error: "imageData is required" });
-    if (!livingDetected && !faceDetected) return res.status(400).json({ error: "A supported living subject must be detected before web search" });
+
+    // Face detection is a hard gate. The server must never perform a reverse-image
+    // search for an image that was not confirmed to contain a visible face locally.
+    if (!faceDetected) return res.status(400).json({ error: "No face detected" });
 
     const { mimeType, buffer } = parseDataUrl(imageData);
     if (buffer.length === 0) return res.status(400).json({ error: "Empty image" });
@@ -59,8 +62,8 @@ app.post("/api/search", async (req, res) => {
     const record = {
       type: "web-evidence",
       imageHash,
-      subjectType: subjectType || null,
-      faceDetected: Boolean(faceDetected),
+      subjectType: subjectType || "person",
+      faceDetected: true,
       descriptorHash: descriptorHash || null,
       searchProvider: search.provider,
       searchId: search.searchId,
@@ -85,9 +88,9 @@ app.post("/api/search", async (req, res) => {
 
     res.json({
       success: true,
-      faceDetected: Boolean(faceDetected),
+      faceDetected: true,
       livingDetected: true,
-      subjectType: subjectType || null,
+      subjectType: subjectType || "person",
       imageHash,
       search: { provider: search.provider, searchId: search.searchId, exactMatchCount: search.exactMatchCount || 0, results: evidence },
       evidence,
