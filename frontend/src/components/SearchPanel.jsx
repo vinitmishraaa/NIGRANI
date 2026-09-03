@@ -189,13 +189,15 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
       });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Search failed");
       setResult(data); onComplete?.(data);
+
       const hasEvidence = Boolean(data.evidence?.length);
       const exactCount = Number(data.search?.exactMatchCount || 0);
+      const resultCount = data.evidence?.length || 0;
       if (hasEvidence && exactCount > 0) {
-        setStatus(`${exactCount} exact image match${exactCount > 1 ? "es" : ""} found. Relevant results are also shown.`);
+        setStatus(`${resultCount} result${resultCount > 1 ? "s" : ""} found.`);
         setKind("ok");
       } else if (hasEvidence) {
-        setStatus("No exact image found. Showing relevant public images instead.");
+        setStatus(`Exact image not found. Showing ${resultCount} relevant image${resultCount > 1 ? "s" : ""}.`);
         setKind("");
       } else {
         setStatus("No matching public image found.");
@@ -216,7 +218,7 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
         <p className="capture-hint">Adjust directly inside the image box: drag to move, use two fingers to zoom on mobile, or the mouse wheel on desktop.</p>
       </div>
       <div className="discovery-panel"><div className="discovery-head"><div><span className="panel-kicker">02 / WEB DISCOVERY</span><h3>Matching sources</h3></div>{result?.evidence?.length ? <span className="result-count">{result.evidence.length} FOUND</span> : null}</div>
-        {!result ? <div className="discovery-empty"><span>SEARCH RESULTS</span><p>Matching public images will appear here after the search runs.</p></div> : result.evidence?.length ? <div className="compact-matches">{result.evidence.slice(0, 3).map((item, i) => <article className="compact-match" key={`${item.link}-${i}`}><div className="compact-match-image">{item.thumbnail ? <img src={item.thumbnail} alt={`Match ${i + 1}`} loading="lazy" /> : <span>NO IMAGE</span>}</div><div className="compact-match-body"><span>MATCH {String(i + 1).padStart(2, "0")}</span><h4>{item.title || "Untitled result"}</h4><p>{item.source || "Web source"}{item.exactMatch ? " · exact image" : " · relevant image"}</p><a href={item.link} target="_blank" rel="noreferrer">Open source ↗</a></div></article>)}</div> : <div className="discovery-empty no-results"><span>NO MATCHES</span><p>No usable public-web matches were returned for this image.</p></div>}
+        {!result ? <div className="discovery-empty"><span>SEARCH RESULTS</span><p>Matching public images will appear here after the search runs.</p></div> : result.evidence?.length ? <div className="compact-matches">{result.evidence.slice(0, 3).map((item, i) => <article className="compact-match" key={`${item.link}-${i}`}><div className="compact-match-image">{item.thumbnail ? <img src={item.thumbnail} alt={`Match ${i + 1}`} loading="lazy" /> : <span>NO IMAGE</span>}</div><div className="compact-match-body"><span>MATCH {String(i + 1).padStart(2, "0")}</span><h4>{item.title || "Untitled result"}</h4><p>{item.source || "Web source"}{item.exactMatch ? " · exact image" : " · visual match"}</p><a href={item.link} target="_blank" rel="noreferrer">Open source ↗</a></div></article>)}</div> : <div className="discovery-empty no-results"><span>NO MATCHES</span><p>No usable public-web matches were returned for this image.</p></div>}
       </div></div>
       <div className="row"><button className="primary big-button" onClick={runPipeline} disabled={busy || !preview}>{busy ? "PROCESSING…" : "RUN DETECT → WEB → CHAIN"}</button></div>
       {status && <p className={`status-line ${kind}`}>{status}</p>}
