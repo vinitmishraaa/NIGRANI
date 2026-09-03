@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getFaceDescriptor, descriptorHash } from "../faceEngine.js";
+import { detectLivingSubject, getFaceDescriptor, descriptorHash } from "../faceEngine.js";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -52,13 +52,22 @@ async function compressImage(file, maxBytes = 460 * 1024) {
   }
 }
 
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Could not prepare the selected image."));
+    img.src = src;
+  });
+}
+
 export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
   const imgRef = useRef(null);
   const uploadInputRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const imageBoxRef = useRef(null);
-  const imageDragRef = useRef(null);
+  const gestureRef = useRef(null);
   const pointersRef = useRef(new Map());
   const [preview, setPreview] = useState(null);
   const [imageData, setImageData] = useState(null);
@@ -128,8 +137,7 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     const ctx = canvas.getContext("2d", { alpha: false });
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const blob = await canvasToBlob(canvas, 0.88);
-    const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
-    await handleFileObject(file);
+    await handleFileObject(new File([blob], "camera-capture.jpg", { type: "image/jpeg" }));
     closeCamera();
   }
 
@@ -150,7 +158,7 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       setPreview(dataUrl);
       setImageData(dataUrl);
       setImageTransform({ scale: 1, x: 0, y: 0 });
-      setStatus("Photo ready. Drag to move and pinch with two fingers to zoom. Click Run Face → Web → Chain when ready.");
+      setStatus("Photo ready. Drag to move and pinch with two fingers to zoom.");
     } catch (error) {
       setStatus(error.message || "Could not prepare the image.");
       setKind("error");
@@ -159,43 +167,30 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
 
   function clampTransform(scale, x, y) {
     const box = imageBoxRef.current;
-    if (!box) return { scale, x, y };
+    const img = imgRef.current;
+    if (!box || !img) return { scale, x, y };
     const rect = box.getBoundingClientRect();
-    const baseWidth = imgRef.current?.offsetWidth || rect.width;
-    const baseHeight = imgRef.current?.offsetHeight || rect.height;
-    const scaledWidth = baseWidth * scale;
-    const scaledHeight = baseHeight * scale;
+    const baseWidth = img.offsetWidth || rect.width;
+    const baseHeight = img.offsetHeight || rect.height;
     if (scale <= 1) return { scale, x: 0, y: 0 };
-    const maxX = Math.max(0, (scaledWidth - rect.width) / 2);
-    const maxY = Math.max(0, (scaledHeight - rect.height) / 2);
+    const maxX = Math.max(0, (baseWidth * scale - rect.width) / 2);
+    const maxY = Math.max(0, (baseHeight * scale - rect.height) / 2);
     return { scale, x: Math.max(-maxX, Math.min(maxX, x)), y: Math.max(-maxY, Math.min(maxY, y)) };
   }
 
-  function distance(a, b) {
-    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-  }
-
-  function midpoint(a, b) {
-    return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
-  }
+  const distance = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  const midpoint = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
 
   function beginImageGesture(event) {
     if (!preview) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
-    const pointers = [...pointersRef.current.values()];
-    if (pointers.length === 1) {
-      imageDragRef.current = { mode: "pan", pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: imageTransform.x, originY: imageTransform.y };
-    } else if (pointers.length === 2) {
-      imageDragRef.current = {
-        mode: "pinch",
-        startDistance: distance(pointers[0], pointers[1]),
-        startScale: imageTransform.scale,
-        startMidpoint: midpoint(pointers[0], pointers[1]),
-        originX: imageTransform.x,
-        originY: imageTransform.y,
-      };
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) {
+      gestureRef.current = { mode: "pan", startX: event.clientX, startY: event.clientY, originX: imageTransform.x, originY: imageTransform.y, pointerId: event.pointerId };
+    } else if (points.length === 2) {
+      gestureRef.current = { mode: "pinch", startDistance: distance(points[0], points[1]), startScale: imageTransform.scale, startMidpoint: midpoint(points[0], points[1]), originX: imageTransform.x, originY: imageTransform.y };
     }
   }
 
@@ -203,29 +198,25 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     if (!pointersRef.current.has(event.pointerId)) return;
     event.preventDefault();
     pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
-    const pointers = [...pointersRef.current.values()];
-    const gesture = imageDragRef.current;
+    const points = [...pointersRef.current.values()];
+    const gesture = gestureRef.current;
     if (!gesture) return;
-    if (pointers.length >= 2 && gesture.mode === "pinch") {
-      const currentDistance = distance(pointers[0], pointers[1]);
-      const ratio = gesture.startDistance ? currentDistance / gesture.startDistance : 1;
+    if (points.length >= 2 && gesture.mode === "pinch") {
+      const ratio = gesture.startDistance ? distance(points[0], points[1]) / gesture.startDistance : 1;
       const nextScale = Math.max(0.55, Math.min(3, gesture.startScale * ratio));
-      const currentMidpoint = midpoint(pointers[0], pointers[1]);
-      const next = clampTransform(nextScale, gesture.originX + currentMidpoint.x - gesture.startMidpoint.x, gesture.originY + currentMidpoint.y - gesture.startMidpoint.y);
-      setImageTransform(next);
-    } else if (pointers.length === 1 && gesture.mode === "pan") {
-      const next = clampTransform(imageTransform.scale, gesture.originX + event.clientX - gesture.startX, gesture.originY + event.clientY - gesture.startY);
-      setImageTransform(next);
+      const center = midpoint(points[0], points[1]);
+      setImageTransform(clampTransform(nextScale, gesture.originX + center.x - gesture.startMidpoint.x, gesture.originY + center.y - gesture.startMidpoint.y));
+    } else if (points.length === 1 && gesture.mode === "pan") {
+      setImageTransform(clampTransform(imageTransform.scale, gesture.originX + event.clientX - gesture.startX, gesture.originY + event.clientY - gesture.startY));
     }
   }
 
   function endImageGesture(event) {
     pointersRef.current.delete(event.pointerId);
-    if (pointersRef.current.size === 0) imageDragRef.current = null;
+    if (pointersRef.current.size === 0) gestureRef.current = null;
     else if (pointersRef.current.size === 1) {
-      const remaining = [...pointersRef.current.entries()][0];
-      const point = remaining[1];
-      imageDragRef.current = { mode: "pan", pointerId: remaining[0], startX: point.clientX, startY: point.clientY, originX: imageTransform.x, originY: imageTransform.y };
+      const [pointerId, point] = [...pointersRef.current.entries()][0];
+      gestureRef.current = { mode: "pan", startX: point.clientX, startY: point.clientY, originX: imageTransform.x, originY: imageTransform.y, pointerId };
     }
   }
 
@@ -233,22 +224,64 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     setImageTransform({ scale: 1, x: 0, y: 0 });
   }
 
+  async function renderAdjustedImage() {
+    const box = imageBoxRef.current;
+    const source = await loadImage(preview);
+    if (!box) return { dataUrl: preview, image: source };
+    const rect = box.getBoundingClientRect();
+    const outWidth = 1200;
+    const outHeight = Math.max(1, Math.round(outWidth * rect.height / rect.width));
+    const canvas = document.createElement("canvas");
+    canvas.width = outWidth;
+    canvas.height = outHeight;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, outWidth, outHeight);
+
+    const baseScale = Math.max(rect.width / source.naturalWidth, rect.height / source.naturalHeight);
+    const totalScale = baseScale * imageTransform.scale;
+    const drawWidth = source.naturalWidth * totalScale;
+    const drawHeight = source.naturalHeight * totalScale;
+    const left = (rect.width - drawWidth) / 2 + imageTransform.x;
+    const top = (rect.height - drawHeight) / 2 + imageTransform.y;
+    const sx = outWidth / rect.width;
+    ctx.drawImage(source, left * sx, top * sx, drawWidth * sx, drawHeight * sx);
+
+    let blob = await canvasToBlob(canvas, 0.9);
+    if (blob.size > 460 * 1024) blob = await canvasToBlob(canvas, 0.72);
+    const dataUrl = await fileToDataUrl(new File([blob], "adjusted-search.jpg", { type: "image/jpeg" }));
+    const adjustedImage = await loadImage(dataUrl);
+    return { dataUrl, image: adjustedImage };
+  }
+
   async function runPipeline() {
     if (!preview || !imgRef.current) return setStatus("Choose or capture an image first."), setKind("error");
-    if (!modelsReady) return setStatus("Face models are still loading."), setKind("error");
+    if (!modelsReady) return setStatus("Vision models are still loading."), setKind("error");
     setBusy(true);
     setResult(null);
-    setStatus("Detecting and encoding face…");
     setKind("");
     try {
-      const descriptor = await getFaceDescriptor(imgRef.current);
-      if (!descriptor) throw new Error("No face detected. Use a clear photo with one visible face.");
-      const dHash = await descriptorHash(descriptor);
-      setStatus("Searching the public web for matching images…");
+      setStatus("Reading the selected living subject…");
+      const adjusted = await renderAdjustedImage();
+      const subject = await detectLivingSubject(adjusted.image);
+      if (!subject) throw new Error("No face detected. Upload a human, animal, or other supported living-being image.");
+
+      let dHash = null;
+      let faceFound = false;
+      if (subject.label === "person") {
+        setStatus("Living subject detected. Checking for a visible face…");
+        const descriptor = await getFaceDescriptor(adjusted.image);
+        if (descriptor) {
+          faceFound = true;
+          dHash = await descriptorHash(descriptor);
+        }
+      }
+
+      setStatus(`${subject.label} detected. Searching the public web for an exact or relevant image…`);
       const res = await fetch(`${apiBase}/api/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageData, faceDetected: true, descriptorHash: dHash }),
+        body: JSON.stringify({ imageData: adjusted.dataUrl, livingDetected: true, subjectType: subject.label, faceDetected: faceFound, descriptorHash: dHash }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Search failed");
@@ -270,86 +303,28 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     <div className="panel search-panel">
       <div className="upload-grid">
         <div>
-          <div
-            ref={imageBoxRef}
-            className={`upload-box ${preview ? "image-adjustable" : ""}`}
-            onPointerDown={beginImageGesture}
-            onPointerMove={moveImageGesture}
-            onPointerUp={endImageGesture}
-            onPointerCancel={endImageGesture}
-            onWheel={(event) => {
-              if (!preview) return;
-              event.preventDefault();
-              const nextScale = Math.max(0.55, Math.min(3, imageTransform.scale - event.deltaY * 0.0015));
-              setImageTransform(clampTransform(nextScale, imageTransform.x, imageTransform.y));
-            }}
-            onDoubleClick={resetImageView}
-          >
-            {preview ? (
-              <img
-                ref={imgRef}
-                className="adjustable-image"
-                src={preview}
-                alt="Selected input"
-                draggable="false"
-                style={{ transform: `translate3d(${imageTransform.x}px, ${imageTransform.y}px, 0) scale(${imageTransform.scale})` }}
-              />
-            ) : (
-              <div className="upload-placeholder">
-                <span className="upload-icon">＋</span>
-                <span>Choose or capture a face photo</span>
-                <small>After uploading, drag or pinch directly on the image.</small>
-              </div>
+          <div ref={imageBoxRef} className={`upload-box ${preview ? "image-adjustable" : ""}`} onPointerDown={beginImageGesture} onPointerMove={moveImageGesture} onPointerUp={endImageGesture} onPointerCancel={endImageGesture} onWheel={(event) => { if (!preview) return; event.preventDefault(); const next = Math.max(0.55, Math.min(3, imageTransform.scale - event.deltaY * 0.0015)); setImageTransform(clampTransform(next, imageTransform.x, imageTransform.y)); }} onDoubleClick={resetImageView}>
+            {preview ? <img ref={imgRef} className="adjustable-image" src={preview} alt="Selected input" draggable="false" style={{ transform: `translate3d(${imageTransform.x}px, ${imageTransform.y}px, 0) scale(${imageTransform.scale})` }} /> : (
+              <div className="upload-placeholder"><span className="upload-icon">＋</span><span>Choose or capture a face photo</span><small>After uploading, drag or pinch directly on the image.</small></div>
             )}
             <input ref={uploadInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} hidden />
           </div>
-
           <div className="capture-actions">
             <button type="button" className="capture-button" onClick={() => uploadInputRef.current?.click()}><span className="button-icon">↑</span> Upload Image</button>
             <button type="button" className="capture-button camera-button" onClick={openCamera}><span className="button-icon">◉</span> Click Photo</button>
           </div>
-
           <p className="capture-hint">Adjust directly inside the image box: drag to move, use two fingers to zoom on mobile, or the mouse wheel on desktop. Double-click resets the view.</p>
         </div>
 
         <div className="discovery-panel">
-          <div className="discovery-head">
-            <div><span className="panel-kicker">02 / WEB DISCOVERY</span><h3>Matching sources</h3></div>
-            {result?.evidence?.length ? <span className="result-count">{result.evidence.length} FOUND</span> : null}
-          </div>
-          {!result ? (
-            <div className="discovery-empty"><span>SEARCH RESULTS</span><p>Matching public images will appear here after the search runs.</p></div>
-          ) : result.evidence?.length ? (
-            <div className="compact-matches">
-              {result.evidence.slice(0, 3).map((item, i) => (
-                <article className="compact-match" key={`${item.link}-${i}`}>
-                  <div className="compact-match-image">{item.thumbnail ? <img src={item.thumbnail} alt={`Match ${i + 1}`} loading="lazy" /> : <span>NO IMAGE</span>}</div>
-                  <div className="compact-match-body">
-                    <span>MATCH {String(i + 1).padStart(2, "0")}</span>
-                    <h4>{item.title || "Untitled result"}</h4>
-                    <p>{item.source || "Web source"}{item.exactMatch ? " · exact image" : " · visual match"}</p>
-                    <a href={item.link} target="_blank" rel="noreferrer">Open source ↗</a>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="discovery-empty no-results"><span>NO MATCHES</span><p>No usable public-web matches were returned for this image.</p></div>
-          )}
+          <div className="discovery-head"><div><span className="panel-kicker">02 / WEB DISCOVERY</span><h3>Matching sources</h3></div>{result?.evidence?.length ? <span className="result-count">{result.evidence.length} FOUND</span> : null}</div>
+          {!result ? <div className="discovery-empty"><span>SEARCH RESULTS</span><p>Matching public images will appear here after the search runs.</p></div> : result.evidence?.length ? <div className="compact-matches">{result.evidence.slice(0, 3).map((item, i) => <article className="compact-match" key={`${item.link}-${i}`}><div className="compact-match-image">{item.thumbnail ? <img src={item.thumbnail} alt={`Match ${i + 1}`} loading="lazy" /> : <span>NO IMAGE</span>}</div><div className="compact-match-body"><span>MATCH {String(i + 1).padStart(2, "0")}</span><h4>{item.title || "Untitled result"}</h4><p>{item.source || "Web source"}{item.exactMatch ? " · exact image" : " · visual match"}</p><a href={item.link} target="_blank" rel="noreferrer">Open source ↗</a></div></article>)}</div> : <div className="discovery-empty no-results"><span>NO MATCHES</span><p>No usable public-web matches were returned for this image.</p></div>}
         </div>
       </div>
-
       <div className="row"><button className="primary big-button" onClick={runPipeline} disabled={busy || !preview}>{busy ? "PROCESSING…" : "RUN FACE → WEB → CHAIN"}</button></div>
       {status && <p className={`status-line ${kind}`}>{status}</p>}
 
-      {cameraOpen && (
-        <div className="camera-modal" role="dialog" aria-modal="true" aria-label="Camera capture">
-          <div className="camera-dialog">
-            <div className="camera-dialog-head"><div><span className="panel-kicker">LIVE CAMERA</span><h3>Take a photo</h3></div><button type="button" className="camera-close" onClick={closeCamera} aria-label="Close camera">×</button></div>
-            {cameraError ? <div className="camera-error"><strong>Camera unavailable</strong><p>{cameraError}</p></div> : <><div className="camera-preview-wrap"><video ref={videoRef} className="camera-preview" autoPlay muted playsInline /></div><div className="camera-actions"><button type="button" onClick={closeCamera}>Cancel</button><button type="button" className="primary" onClick={capturePhoto}>Take Photo</button></div></>}
-          </div>
-        </div>
-      )}
+      {cameraOpen && <div className="camera-modal" role="dialog" aria-modal="true" aria-label="Camera capture"><div className="camera-dialog"><div className="camera-dialog-head"><div><span className="panel-kicker">LIVE CAMERA</span><h3>Take a photo</h3></div><button type="button" className="camera-close" onClick={closeCamera} aria-label="Close camera">×</button></div>{cameraError ? <div className="camera-error"><strong>Camera unavailable</strong><p>{cameraError}</p></div> : <><div className="camera-preview-wrap"><video ref={videoRef} className="camera-preview" autoPlay muted playsInline /></div><div className="camera-actions"><button type="button" onClick={closeCamera}>Cancel</button><button type="button" className="primary" onClick={capturePhoto}>Take Photo</button></div></>}</div></div>}
     </div>
   );
 }
