@@ -10,12 +10,14 @@ const ANIMAL_CLASSES = new Set([
   "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe",
 ]);
 
-const ANIMAL_SCORE_THRESHOLD = 0.60;
+// Keep the animal gate conservative so visual false positives do not pass as living subjects.
+const ANIMAL_SCORE_THRESHOLD = 0.72;
 
 let loaded = false;
 let loadingPromise = null;
 let animalModel = null;
-let faceModelsReady = false;
+let faceDetectorReady = false;
+let faceRecognitionReady = false;
 
 export function loadVisionModels() {
   if (loaded) return Promise.resolve();
@@ -31,11 +33,17 @@ export function loadVisionModels() {
         if (typeof faceapi?.nets?.tinyFaceDetector?.loadFromUri !== "function") {
           throw new Error("Face API unavailable");
         }
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
+
+        // The tiny face detector is the only model required for subject gating.
+        await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+        faceDetectorReady = true;
+
+        // Recognition models are optional for detection. Their failure must not disable human-face detection.
+        const [landmarkResult, recognitionResult] = await Promise.allSettled([
           faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
           faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL),
         ]);
+        faceRecognitionReady = landmarkResult.status === "fulfilled" && recognitionResult.status === "fulfilled";
       })(),
     ]);
 
@@ -44,11 +52,16 @@ export function loadVisionModels() {
     }
 
     animalModel = animalResult.value;
-    faceModelsReady = faceResult.status === "fulfilled";
+    if (faceResult.status !== "fulfilled") {
+      faceDetectorReady = false;
+      faceRecognitionReady = false;
+    }
     loaded = true;
   })().catch((error) => {
     loadingPromise = null;
     loaded = false;
+    faceDetectorReady = false;
+    faceRecognitionReady = false;
     throw new Error(error?.message || String(error));
   });
 
@@ -74,17 +87,34 @@ function createFlippedCanvas(mediaEl) {
   return canvas;
 }
 
+function mirroredGeometryConsistent(first, second, width, height) {
+  if (!Array.isArray(first?.bbox) || !Array.isArray(second?.bbox)) return false;
+  const [x1, y1, w1, h1] = first.bbox.map(Number);
+  const [x2, y2, w2, h2] = second.bbox.map(Number);
+  if (![x1, y1, w1, h1, x2, y2, w2, h2].every(Number.isFinite)) return false;
+
+  const c1x = (x1 + w1 / 2) / width;
+  const c1y = (y1 + h1 / 2) / height;
+  const c2x = 1 - (x2 + w2 / 2) / width;
+  const c2y = (y2 + h2 / 2) / height;
+  const centerDistance = Math.hypot(c1x - c2x, c1y - c2y);
+  const widthDelta = Math.abs(w1 - w2) / Math.max(width, 1);
+  const heightDelta = Math.abs(h1 - h2) / Math.max(height, 1);
+
+  return centerDistance <= 0.14 && widthDelta <= 0.20 && heightDelta <= 0.20;
+}
+
 export async function detectLivingSubject(mediaEl) {
   if (!loaded || !animalModel) {
     throw new Error("Vision models are unavailable. Please refresh and try again.");
   }
 
-  // Humans: require an actual visible human face.
-  if (faceModelsReady) {
+  // Humans: only a real visible human face can pass the gate.
+  if (faceDetectorReady) {
     try {
       const face = await faceapi.detectSingleFace(
         mediaEl,
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }),
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.35 }),
       );
       if (face) {
         return { label: "person", score: face.score, kind: "human", faceDetected: true };
@@ -94,9 +124,7 @@ export async function detectLivingSubject(mediaEl) {
     }
   }
 
-  // Animals: require the same supported animal class to be detected confidently
-  // in both the original image and a horizontally flipped copy. This reduces
-  // single-frame false positives such as a black-hole/landscape being labeled as cat.
+  // Animals: require the same supported class and stable mirrored geometry in both views.
   const originalPredictions = await animalModel.detect(mediaEl, 20, 0.20);
   const originalAnimal = getBestAnimal(originalPredictions);
   if (!originalAnimal) return null;
@@ -107,8 +135,12 @@ export async function detectLivingSubject(mediaEl) {
 
   if (!flippedAnimal || flippedAnimal.class !== originalAnimal.class) return null;
 
+  const width = mediaEl.naturalWidth || mediaEl.videoWidth || mediaEl.width || 1;
+  const height = mediaEl.naturalHeight || mediaEl.videoHeight || mediaEl.height || 1;
+  if (!mirroredGeometryConsistent(originalAnimal, flippedAnimal, width, height)) return null;
+
   const combinedScore = (Number(originalAnimal.score) + Number(flippedAnimal.score)) / 2;
-  if (combinedScore < 0.65) return null;
+  if (combinedScore < 0.75) return null;
 
   return {
     label: originalAnimal.class,
@@ -119,11 +151,11 @@ export async function detectLivingSubject(mediaEl) {
 }
 
 export async function getFaceDescriptor(mediaEl) {
-  if (!faceModelsReady) return null;
+  if (!faceRecognitionReady) return null;
 
   try {
     const detection = await faceapi
-      .detectSingleFace(mediaEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+      .detectSingleFace(mediaEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.35 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 
