@@ -196,11 +196,8 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
       if (hasEvidence && exactCount > 0) {
         setStatus(`${resultCount} result${resultCount > 1 ? "s" : ""} found.`);
         setKind("ok");
-      } else if (hasEvidence) {
-        setStatus(`Exact image not found. Showing ${resultCount} relevant image${resultCount > 1 ? "s" : ""}.`);
-        setKind("");
       } else {
-        setStatus("No matching public image found.");
+        setStatus("Exact image not found. Showing relevant images.");
         setKind("");
       }
     } catch (error) { setStatus(error.message || "The verification pipeline failed."); setKind("error"); }
