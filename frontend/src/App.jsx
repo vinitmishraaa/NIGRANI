@@ -25,13 +25,13 @@ export default function App() {
     <div className="app">
       <Header />
       <div className="notice">
-        <strong>Pipeline:</strong> living subject detected locally → image searched on the public web → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
+        <strong>Pipeline:</strong> subject detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
       {modelError && <div className="config-warning">Vision model error: {modelError}</div>}
 
       <section className="hero-section">
-        <div className="section-head"><span className="section-num">01</span><h2>Living subject & web evidence</h2></div>
-        <p className="section-desc">Choose a human, animal, or other supported living-being photo. Nigrani detects a living subject locally, uses face encoding when a human face is visible, performs a genuine reverse-image search, and records the discovered public evidence.</p>
+        <div className="section-head"><span className="section-num">01</span><h2>Web image search &amp; evidence</h2></div>
+        <p className="section-desc">Upload a person or supported living-being image. Nigrani detects the subject locally, uses face encoding when a human face is visible, searches the public web for exact or relevant image matches, and records the discovered evidence.</p>
         <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} onComplete={(data) => { setResult(data); setChainRefresh(n => n + 1); }} />
       </section>
 
