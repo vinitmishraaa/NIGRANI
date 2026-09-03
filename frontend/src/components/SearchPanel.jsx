@@ -168,27 +168,28 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
     if (!modelsReady) return setStatus("Vision models are still loading."), setKind("error");
     setBusy(true); setResult(null); setKind("");
     try {
-      setStatus("Reading the selected living subject…");
+      setStatus("Checking for a human face or supported animal…");
       const adjusted = await renderAdjustedImage();
       const subject = await detectLivingSubject(adjusted.image);
-      if (!subject) throw new Error("No face detected. Upload a human, animal, or other supported living-being image.");
+      if (!subject) throw new Error("No face detected. Upload a human face or supported animal image.");
 
       let dHash = null; let faceFound = false;
-      if (subject.label === "person") {
-        setStatus("Living subject detected. Checking for a visible face…");
+      if (subject.kind === "human") {
+        setStatus("Human face detected. Searching the public web…");
         const descriptor = await getFaceDescriptor(adjusted.image);
         if (descriptor) { faceFound = true; dHash = await descriptorHash(descriptor); }
+      } else {
+        setStatus(`${subject.label} detected. Searching for relevant ${subject.label} images on the public web…`);
       }
 
-      setStatus(`${subject.label} detected. Searching the public web for an exact or relevant image…`);
-      const deviceMarker = `${deviceId || "unknown"}:${dHash || "no-face"}`;
+      const deviceMarker = `${deviceId || "unknown"}:${dHash || `${subject.kind}-${subject.label}`}`;
       const res = await fetch(`${apiBase}/api/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData: adjusted.dataUrl, livingDetected: true, subjectType: subject.label, faceDetected: true, actualFaceFound: faceFound, descriptorHash: deviceMarker }),
       });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Search failed");
       setResult(data); onComplete?.(data);
-      setStatus(data.evidence?.length ? `${data.evidence.length} matching source${data.evidence.length > 1 ? "s" : ""} found and fingerprinted.` : "Search completed, but no usable matches were returned."); setKind(data.evidence?.length ? "ok" : "");
+      setStatus(data.evidence?.length ? `${data.evidence.length} matching source${data.evidence.length > 1 ? "s" : ""} found and fingerprinted.` : "No matching public image found."); setKind(data.evidence?.length ? "ok" : "");
     } catch (error) { setStatus(error.message || "The verification pipeline failed."); setKind("error"); }
     finally { setBusy(false); }
   }
@@ -197,7 +198,7 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
     <div className="panel search-panel">
       <div className="upload-grid"><div>
         <div ref={imageBoxRef} className={`upload-box ${preview ? "image-adjustable" : ""}`} onPointerDown={beginImageGesture} onPointerMove={moveImageGesture} onPointerUp={endImageGesture} onPointerCancel={endImageGesture} onWheel={(event) => { if (!preview) return; event.preventDefault(); const next = Math.max(0.55, Math.min(3, imageTransform.scale - event.deltaY * 0.0015)); setImageTransform(clampTransform(next, imageTransform.x, imageTransform.y)); }} onDoubleClick={resetImageView}>
-          {preview ? <img ref={imgRef} className="adjustable-image" src={preview} alt="Selected input" draggable="false" style={{ transform: `translate3d(${imageTransform.x}px, ${imageTransform.y}px, 0) scale(${imageTransform.scale})` }} /> : <div className="upload-placeholder"><span className="upload-icon">＋</span><span>Choose or capture a living-subject photo</span><small>After uploading, drag or pinch directly on the image.</small></div>}
+          {preview ? <img ref={imgRef} className="adjustable-image" src={preview} alt="Selected input" draggable="false" style={{ transform: `translate3d(${imageTransform.x}px, ${imageTransform.y}px, 0) scale(${imageTransform.scale})` }} /> : <div className="upload-placeholder"><span className="upload-icon">＋</span><span>Choose or capture a human or animal photo</span><small>After uploading, drag or pinch directly on the image.</small></div>}
           <input ref={uploadInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} hidden />
         </div>
         <div className="capture-actions"><button type="button" className="capture-button" onClick={() => uploadInputRef.current?.click()}><span className="button-icon">↑</span> Upload Image</button><button type="button" className="capture-button camera-button" onClick={openCamera}><span className="button-icon">◉</span> Click Photo</button></div>
@@ -206,7 +207,7 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
       <div className="discovery-panel"><div className="discovery-head"><div><span className="panel-kicker">02 / WEB DISCOVERY</span><h3>Matching sources</h3></div>{result?.evidence?.length ? <span className="result-count">{result.evidence.length} FOUND</span> : null}</div>
         {!result ? <div className="discovery-empty"><span>SEARCH RESULTS</span><p>Matching public images will appear here after the search runs.</p></div> : result.evidence?.length ? <div className="compact-matches">{result.evidence.slice(0, 3).map((item, i) => <article className="compact-match" key={`${item.link}-${i}`}><div className="compact-match-image">{item.thumbnail ? <img src={item.thumbnail} alt={`Match ${i + 1}`} loading="lazy" /> : <span>NO IMAGE</span>}</div><div className="compact-match-body"><span>MATCH {String(i + 1).padStart(2, "0")}</span><h4>{item.title || "Untitled result"}</h4><p>{item.source || "Web source"}{item.exactMatch ? " · exact image" : " · visual match"}</p><a href={item.link} target="_blank" rel="noreferrer">Open source ↗</a></div></article>)}</div> : <div className="discovery-empty no-results"><span>NO MATCHES</span><p>No usable public-web matches were returned for this image.</p></div>}
       </div></div>
-      <div className="row"><button className="primary big-button" onClick={runPipeline} disabled={busy || !preview}>{busy ? "PROCESSING…" : "RUN FACE → WEB → CHAIN"}</button></div>
+      <div className="row"><button className="primary big-button" onClick={runPipeline} disabled={busy || !preview}>{busy ? "PROCESSING…" : "RUN DETECT → WEB → CHAIN"}</button></div>
       {status && <p className={`status-line ${kind}`}>{status}</p>}
       {cameraOpen && <div className="camera-modal" role="dialog" aria-modal="true" aria-label="Camera capture"><div className="camera-dialog"><div className="camera-dialog-head"><div><span className="panel-kicker">LIVE CAMERA</span><h3>Take a photo</h3></div><button type="button" className="camera-close" onClick={closeCamera} aria-label="Close camera">×</button></div>{cameraError ? <div className="camera-error"><strong>Camera unavailable</strong><p>{cameraError}</p></div> : <><div className="camera-preview-wrap"><video ref={videoRef} className="camera-preview" autoPlay muted playsInline /></div><div className="camera-actions"><button type="button" onClick={closeCamera}>Cancel</button><button type="button" className="primary" onClick={capturePhoto}>Take Photo</button></div></>}</div></div>}
     </div>
