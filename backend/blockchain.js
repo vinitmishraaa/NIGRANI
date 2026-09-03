@@ -12,10 +12,7 @@ function computeHash({ index, timestamp, data, previousHash, nonce }) {
 function mineBlock(block) {
   let nonce = 0;
   let hash = computeHash({ ...block, nonce });
-  while (!hash.startsWith("0".repeat(DIFFICULTY))) {
-    nonce += 1;
-    hash = computeHash({ ...block, nonce });
-  }
+  while (!hash.startsWith("0".repeat(DIFFICULTY))) { nonce += 1; hash = computeHash({ ...block, nonce }); }
   return { ...block, nonce, hash };
 }
 function genesisBlock() {
@@ -34,31 +31,28 @@ function loadStore() {
   saveStore(store);
   return store;
 }
-
 const store = loadStore();
-
+function keyFromData(data) {
+  const explicit = data?.deviceId;
+  if (explicit) return String(explicit).slice(0, 120);
+  const marker = typeof data?.descriptorHash === "string" ? data.descriptorHash.split(":", 1)[0] : "";
+  return marker || DEFAULT_DEVICE;
+}
 function ensureChain(deviceId) {
   const key = String(deviceId || DEFAULT_DEVICE).trim() || DEFAULT_DEVICE;
-  if (!Array.isArray(store[key]) || !store[key].length) {
-    store[key] = [genesisBlock()];
-    saveStore(store);
-  }
+  if (!Array.isArray(store[key]) || !store[key].length) { store[key] = [genesisBlock()]; saveStore(store); }
   return store[key];
 }
+function allChains() { return Object.entries(store).flatMap(([deviceId, chain]) => (Array.isArray(chain) ? chain.map(block => ({ ...block, data: { ...block.data, deviceId: block.data?.type === "genesis" ? deviceId : block.data?.deviceId || deviceId } })) : [])); }
 
-export function getChain(deviceId = DEFAULT_DEVICE) { return ensureChain(deviceId); }
-
-export function addBlock(data, deviceId = DEFAULT_DEVICE) {
-  const chain = ensureChain(deviceId);
+export function getChain(deviceId = null) { return deviceId ? ensureChain(deviceId) : allChains(); }
+export function addBlock(data, deviceId = null) {
+  const chain = ensureChain(deviceId || keyFromData(data));
   const previous = chain[chain.length - 1];
   const block = mineBlock({ index: previous.index + 1, timestamp: new Date().toISOString(), data, previousHash: previous.hash });
-  chain.push(block);
-  saveStore(store);
-  return block;
+  chain.push(block); saveStore(store); return block;
 }
-
-export function isChainValid(deviceId = DEFAULT_DEVICE) {
-  const chain = ensureChain(deviceId);
+function validateChain(chain) {
   for (let i = 1; i < chain.length; i++) {
     const current = chain[i], previous = chain[i - 1];
     if (computeHash(current) !== current.hash) return { valid: false, brokenAt: i, reason: "hash mismatch" };
@@ -67,11 +61,16 @@ export function isChainValid(deviceId = DEFAULT_DEVICE) {
   }
   return { valid: true };
 }
-
-export function findBlockByRecordHash(recordHash, deviceId = DEFAULT_DEVICE) {
-  return ensureChain(deviceId).find((b) => b.data?.recordHash === recordHash) || null;
+export function isChainValid(deviceId = null) {
+  if (deviceId) return validateChain(ensureChain(deviceId));
+  const entries = Object.entries(store);
+  const broken = entries.map(([id, chain]) => ({ id, check: validateChain(chain) })).find(item => !item.check.valid);
+  return broken ? { valid: false, brokenAt: broken.check.brokenAt, reason: `${broken.id}: ${broken.check.reason}` } : { valid: true };
 }
-
+export function findBlockByRecordHash(recordHash, deviceId = null) {
+  if (deviceId) return ensureChain(deviceId).find(b => b.data?.recordHash === recordHash) || null;
+  return allChains().find(b => b.data?.recordHash === recordHash) || null;
+}
 export function hashRecord(record) {
   const { recordHash: _ignored, ...canonical } = record;
   return sha256(JSON.stringify(canonical));
