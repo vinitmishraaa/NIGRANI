@@ -55,26 +55,41 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
     throw new Error(upload.error || "Image upload to search provider failed");
   }
 
-  // Exact and visual image search are both based on the submitted image.
-  // Never add generic keyword-image results: they can be unrelated to the input.
+  // First ask Lens for exact copies and visual matches.
+  // The fallback below is still image-derived: it asks Lens for its complete
+  // image-search response and reuses only the returned visual_matches block.
   const [exact, visual] = await Promise.all([
     safeLensSearch(upload.image_id, apiKey, "exact_matches"),
     safeLensSearch(upload.image_id, apiKey, "visual_matches"),
   ]);
 
-  const exactData = exact.data || {};
-  const visualData = visual.data || {};
+  let exactData = exact.data || {};
+  let visualData = visual.data || {};
+
+  // Some human/selfie images can return no dedicated visual_matches block even
+  // though Google Lens has related visual results in its full image-search page.
+  // Retry with type=all, but never construct a generic keyword query.
+  let allData = {};
+  let allError = null;
+  if (!Array.isArray(visualData.visual_matches) || visualData.visual_matches.length === 0) {
+    const all = await safeLensSearch(upload.image_id, apiKey, "all");
+    allData = all.data || {};
+    allError = all.error || null;
+  }
 
   const exactItems = Array.isArray(exactData.exact_matches)
     ? exactData.exact_matches.map(item => ({ ...item, exact_matches: true }))
     : [];
-  const visualItems = Array.isArray(visualData.visual_matches)
+  const directVisualItems = Array.isArray(visualData.visual_matches)
     ? visualData.visual_matches.map(item => ({ ...item, exact_matches: false }))
     : [];
+  const fallbackVisualItems = Array.isArray(allData.visual_matches)
+    ? allData.visual_matches.map(item => ({ ...item, exact_matches: false }))
+    : [];
 
-  // Exact matches always come first. Visual matches are the only fallback because
-  // they are still derived from the uploaded image rather than a generic query.
-  const sourceItems = [...exactItems, ...visualItems];
+  // Keep exact matches first, then only visual results derived from the submitted
+  // image. No generic Google Images/search fallback is used.
+  const sourceItems = [...exactItems, ...directVisualItems, ...fallbackVisualItems];
 
   const seen = new Set();
   const results = [];
@@ -100,7 +115,7 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
 
   return {
     provider: "Google Lens via SerpApi",
-    searchId: exactData.search_metadata?.id || visualData.search_metadata?.id || null,
+    searchId: exactData.search_metadata?.id || visualData.search_metadata?.id || allData.search_metadata?.id || null,
     imageId: upload.image_id,
     subjectType,
     exactMatchCount,
@@ -108,5 +123,6 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
     results,
     exactSearchError: exact.error || null,
     visualSearchError: visual.error || null,
+    allSearchError: allError,
   };
 }
