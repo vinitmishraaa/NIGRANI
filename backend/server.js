@@ -59,6 +59,26 @@ app.post("/api/search", async (req, res) => {
     const search = await reverseSearchImage(buffer, mimeType);
 
     const evidence = search.results.slice(0, 3).map(normalizeEvidence);
+
+    // A zero-result search is not evidence. Do not create a fingerprint or block.
+    if (!evidence.length) {
+      return res.json({
+        success: true,
+        matched: false,
+        message: "No matching public image found",
+        faceDetected: true,
+        subjectType: subjectType || "person",
+        imageHash,
+        search: {
+          provider: search.provider,
+          searchId: search.searchId,
+          exactMatchCount: search.exactMatchCount || 0,
+          results: [],
+        },
+        evidence: [],
+      });
+    }
+
     const record = {
       type: "web-evidence",
       imageHash,
@@ -88,8 +108,8 @@ app.post("/api/search", async (req, res) => {
 
     res.json({
       success: true,
+      matched: true,
       faceDetected: true,
-      livingDetected: true,
       subjectType: subjectType || "person",
       imageHash,
       search: { provider: search.provider, searchId: search.searchId, exactMatchCount: search.exactMatchCount || 0, results: evidence },
