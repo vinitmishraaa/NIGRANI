@@ -1,54 +1,27 @@
 import * as faceModule from "@vladmandic/face-api";
-import * as cocoModule from "@tensorflow-models/coco-ssd";
 
 const faceapi = faceModule.default || faceModule;
-const cocoSsd = cocoModule.default || cocoModule;
 const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model";
 
 let loaded = false;
 let loadingPromise = null;
-let objectModel = null;
-let faceModelsReady = false;
-
-const LIVING_CLASSES = new Set([
-  "person",
-  "bird",
-  "cat",
-  "dog",
-  "horse",
-  "sheep",
-  "cow",
-  "elephant",
-  "bear",
-  "zebra",
-  "giraffe",
-  "potted plant",
-]);
 
 export function loadVisionModels() {
   if (loaded) return Promise.resolve();
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    if (typeof cocoSsd?.load !== "function") {
-      throw new Error("Living-object detection could not be initialized.");
+    if (typeof faceapi?.nets?.tinyFaceDetector?.loadFromUri !== "function") {
+      throw new Error("Face detection could not be initialized.");
     }
 
-    // The living-object detector is the required model. Face models load separately
-    // so a face-model problem can never block animal/living-subject searches.
-    objectModel = await cocoSsd.load();
-
-    try {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      ]);
-      faceModelsReady = true;
-    } catch (error) {
-      console.warn("Optional face models could not be loaded:", error);
-      faceModelsReady = false;
-    }
+    // Face detection is REQUIRED. NIGRANI must never send an image to web search
+    // unless a visible human face has been detected locally first.
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+    ]);
 
     loaded = true;
   })().catch((error) => {
@@ -60,19 +33,19 @@ export function loadVisionModels() {
 }
 
 export async function detectLivingSubject(mediaEl) {
-  if (!objectModel) throw new Error("Living-subject model is unavailable. Please refresh and try again.");
+  if (!loaded) throw new Error("Face detection models are unavailable. Please refresh and try again.");
 
-  const predictions = await objectModel.detect(mediaEl);
-  const living = predictions
-    .filter((item) => LIVING_CLASSES.has(item.class) && item.score >= 0.45)
-    .sort((a, b) => b.score - a.score);
+  const detection = await faceapi.detectSingleFace(
+    mediaEl,
+    new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }),
+  );
 
-  if (!living.length) return null;
-  return { label: living[0].class, score: living[0].score };
+  if (!detection) return null;
+  return { label: "person", score: detection.score };
 }
 
 export async function getFaceDescriptor(mediaEl) {
-  if (!faceModelsReady) return null;
+  if (!loaded) return null;
 
   const detection = await faceapi
     .detectSingleFace(mediaEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
