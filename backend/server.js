@@ -45,9 +45,9 @@ app.get("/api/health", (req, res) => {
 
 app.post("/api/search", async (req, res) => {
   try {
-    const { imageData, faceDetected, descriptorHash } = req.body;
+    const { imageData, livingDetected, subjectType, faceDetected, descriptorHash } = req.body;
     if (!imageData) return res.status(400).json({ error: "imageData is required" });
-    if (!faceDetected) return res.status(400).json({ error: "A face must be detected before web search" });
+    if (!livingDetected && !faceDetected) return res.status(400).json({ error: "A supported living subject must be detected before web search" });
 
     const { mimeType, buffer } = parseDataUrl(imageData);
     if (buffer.length === 0) return res.status(400).json({ error: "Empty image" });
@@ -55,11 +55,12 @@ app.post("/api/search", async (req, res) => {
     const imageHash = sha256(buffer);
     const search = await reverseSearchImage(buffer, mimeType);
 
-    // Exact sources are ranked first; if none exist, relevant visual sources are used as fallback.
     const evidence = search.results.slice(0, 3).map(normalizeEvidence);
     const record = {
       type: "web-evidence",
       imageHash,
+      subjectType: subjectType || null,
+      faceDetected: Boolean(faceDetected),
       descriptorHash: descriptorHash || null,
       searchProvider: search.provider,
       searchId: search.searchId,
@@ -84,7 +85,9 @@ app.post("/api/search", async (req, res) => {
 
     res.json({
       success: true,
-      faceDetected: true,
+      faceDetected: Boolean(faceDetected),
+      livingDetected: true,
+      subjectType: subjectType || null,
       imageHash,
       search: { provider: search.provider, searchId: search.searchId, exactMatchCount: search.exactMatchCount || 0, results: evidence },
       evidence,
@@ -109,10 +112,13 @@ app.post("/api/verify-evidence", async (req, res) => {
     const block = findBlockByRecordHash(recordHash);
     if (!block) return res.status(404).json({ verified: false, error: "Record not found on local chain" });
 
+    const storedRecordHash = block.data?.recordHash || null;
     const reconstructed = hashRecord(block.data);
-    const fingerprintMatches = reconstructed === recordHash;
+    const canonicalMatches = reconstructed === recordHash;
+    const storedHashMatches = storedRecordHash === recordHash;
+    const fingerprintMatches = storedHashMatches && (canonicalMatches || reconstructed === storedRecordHash);
     const chainValid = isChainValid();
-    const evidenceMatches = JSON.stringify(block.data.evidence) === JSON.stringify(evidence);
+    const evidenceMatches = JSON.stringify(block.data.evidence || []) === JSON.stringify(evidence || []);
 
     let onchainCheck = null;
     const chainAnchor = block.data.onchain?.txHash;
@@ -123,6 +129,8 @@ app.post("/api/verify-evidence", async (req, res) => {
     res.json({
       verified: fingerprintMatches && chainValid.valid && evidenceMatches,
       fingerprintMatches,
+      storedHashMatches,
+      canonicalMatches,
       evidenceMatches,
       chainValid,
       block: { index: block.index, hash: block.hash, timestamp: block.timestamp },
