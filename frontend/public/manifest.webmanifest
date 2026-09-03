@@ -1,0 +1,17 @@
+{
+  "name": "NIGRANI",
+  "short_name": "NIGRANI",
+  "description": "NIGRANI — Web Image Evidence & Verification",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "icons": [
+    {
+      "src": "/nigrani-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
