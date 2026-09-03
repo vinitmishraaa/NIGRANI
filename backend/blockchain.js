@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 
 const CHAIN_FILE = new URL("./chain-data.json", import.meta.url);
 const DIFFICULTY = 3;
+const DEFAULT_DEVICE = "default";
 
 function sha256(input) { return createHash("sha256").update(input).digest("hex"); }
 function computeHash({ index, timestamp, data, previousHash, nonce }) {
@@ -18,31 +19,46 @@ function mineBlock(block) {
   return { ...block, nonce, hash };
 }
 function genesisBlock() {
-  return mineBlock({ index: 0, timestamp: new Date(0).toISOString(), data: { type: "genesis", note: "Proofmark evidence chain genesis" }, previousHash: "0" });
+  return mineBlock({ index: 0, timestamp: new Date(0).toISOString(), data: { type: "genesis", note: "NIGRANI evidence chain genesis" }, previousHash: "0" });
 }
-function saveChain(chain) { writeFileSync(CHAIN_FILE, JSON.stringify(chain, null, 2)); }
-function loadChain() {
+function saveStore(store) { writeFileSync(CHAIN_FILE, JSON.stringify(store, null, 2)); }
+function loadStore() {
   if (existsSync(CHAIN_FILE)) {
     try {
       const parsed = JSON.parse(readFileSync(CHAIN_FILE, "utf-8"));
-      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (Array.isArray(parsed) && parsed.length) return { [DEFAULT_DEVICE]: parsed };
+      if (parsed && typeof parsed === "object") return parsed;
     } catch {}
   }
-  const chain = [genesisBlock()];
-  saveChain(chain);
-  return chain;
+  const store = {};
+  saveStore(store);
+  return store;
 }
 
-let chain = loadChain();
-export function getChain() { return chain; }
-export function addBlock(data) {
+const store = loadStore();
+
+function ensureChain(deviceId) {
+  const key = String(deviceId || DEFAULT_DEVICE).trim() || DEFAULT_DEVICE;
+  if (!Array.isArray(store[key]) || !store[key].length) {
+    store[key] = [genesisBlock()];
+    saveStore(store);
+  }
+  return store[key];
+}
+
+export function getChain(deviceId = DEFAULT_DEVICE) { return ensureChain(deviceId); }
+
+export function addBlock(data, deviceId = DEFAULT_DEVICE) {
+  const chain = ensureChain(deviceId);
   const previous = chain[chain.length - 1];
   const block = mineBlock({ index: previous.index + 1, timestamp: new Date().toISOString(), data, previousHash: previous.hash });
   chain.push(block);
-  saveChain(chain);
+  saveStore(store);
   return block;
 }
-export function isChainValid() {
+
+export function isChainValid(deviceId = DEFAULT_DEVICE) {
+  const chain = ensureChain(deviceId);
   for (let i = 1; i < chain.length; i++) {
     const current = chain[i], previous = chain[i - 1];
     if (computeHash(current) !== current.hash) return { valid: false, brokenAt: i, reason: "hash mismatch" };
@@ -51,9 +67,11 @@ export function isChainValid() {
   }
   return { valid: true };
 }
-export function findBlockByRecordHash(recordHash) {
-  return chain.find((b) => b.data?.recordHash === recordHash) || null;
+
+export function findBlockByRecordHash(recordHash, deviceId = DEFAULT_DEVICE) {
+  return ensureChain(deviceId).find((b) => b.data?.recordHash === recordHash) || null;
 }
+
 export function hashRecord(record) {
   const { recordHash: _ignored, ...canonical } = record;
   return sha256(JSON.stringify(canonical));
