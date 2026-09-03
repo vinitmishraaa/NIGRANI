@@ -25,7 +25,6 @@ async function compressImage(file, maxBytes = 460 * 1024) {
       img.onerror = () => reject(new Error("The selected image could not be read."));
       img.src = objectUrl;
     });
-
     const maxDimension = 1600;
     const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
     const canvas = document.createElement("canvas");
@@ -33,14 +32,12 @@ async function compressImage(file, maxBytes = 460 * 1024) {
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const ctx = canvas.getContext("2d", { alpha: false });
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
     let quality = 0.88;
     let blob = await canvasToBlob(canvas, quality);
     while (blob.size > maxBytes && quality > 0.42) {
       quality -= 0.06;
       blob = await canvasToBlob(canvas, quality);
     }
-
     if (blob.size > maxBytes) {
       const factor = Math.sqrt(maxBytes / blob.size);
       canvas.width = Math.max(640, Math.floor(canvas.width * factor));
@@ -49,7 +46,6 @@ async function compressImage(file, maxBytes = 460 * 1024) {
       ctx2.drawImage(image, 0, 0, canvas.width, canvas.height);
       blob = await canvasToBlob(canvas, 0.7);
     }
-
     return new File([blob], "capture.jpg", { type: "image/jpeg" });
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -61,15 +57,12 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
   const uploadInputRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const cropImageRef = useRef(null);
-  const cropViewportRef = useRef(null);
-  const dragRef = useRef(null);
+  const imageBoxRef = useRef(null);
+  const imageDragRef = useRef(null);
+  const pointersRef = useRef(new Map());
   const [preview, setPreview] = useState(null);
   const [imageData, setImageData] = useState(null);
-  const [cropSource, setCropSource] = useState(null);
-  const [cropOpen, setCropOpen] = useState(false);
-  const [cropZoom, setCropZoom] = useState(1);
-  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [imageTransform, setImageTransform] = useState({ scale: 1, x: 0, y: 0 });
   const [status, setStatus] = useState("Choose an image or take a photo to begin.");
   const [kind, setKind] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,7 +84,6 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       setCameraOpen(true);
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -128,7 +120,6 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       setCameraError("Camera is still starting. Please wait a moment and try again.");
       return;
     }
-
     const canvas = document.createElement("canvas");
     const maxDimension = 1600;
     const scale = Math.min(1, maxDimension / Math.max(video.videoWidth, video.videoHeight));
@@ -156,113 +147,90 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       setStatus("Preparing photo…");
       const compressed = await compressImage(file);
       const dataUrl = await fileToDataUrl(compressed);
-      setCropSource(dataUrl);
-      setCropZoom(1);
-      setCropOffset({ x: 0, y: 0 });
-      setCropOpen(true);
-      setStatus("Adjust the image, then click Use This Portion.");
+      setPreview(dataUrl);
+      setImageData(dataUrl);
+      setImageTransform({ scale: 1, x: 0, y: 0 });
+      setStatus("Photo ready. Drag to move and pinch with two fingers to zoom. Click Run Face → Web → Chain when ready.");
     } catch (error) {
       setStatus(error.message || "Could not prepare the image.");
       setKind("error");
     }
   }
 
-  function getCropGeometry() {
-    const viewport = cropViewportRef.current;
-    const image = cropImageRef.current;
-    if (!viewport || !image?.naturalWidth || !image?.naturalHeight) return null;
-
-    const vw = viewport.clientWidth;
-    const vh = viewport.clientHeight;
-    const baseScale = Math.max(vw / image.naturalWidth, vh / image.naturalHeight);
-    const scale = baseScale * cropZoom;
-    const dw = image.naturalWidth * scale;
-    const dh = image.naturalHeight * scale;
-    const minX = Math.min(0, vw - dw);
-    const minY = Math.min(0, vh - dh);
-    const x = Math.min(0, Math.max(minX, cropOffset.x));
-    const y = Math.min(0, Math.max(minY, cropOffset.y));
-    return { vw, vh, scale, dw, dh, x, y, minX, minY };
+  function clampTransform(scale, x, y) {
+    const box = imageBoxRef.current;
+    if (!box) return { scale, x, y };
+    const rect = box.getBoundingClientRect();
+    const baseWidth = imgRef.current?.offsetWidth || rect.width;
+    const baseHeight = imgRef.current?.offsetHeight || rect.height;
+    const scaledWidth = baseWidth * scale;
+    const scaledHeight = baseHeight * scale;
+    if (scale <= 1) return { scale, x: 0, y: 0 };
+    const maxX = Math.max(0, (scaledWidth - rect.width) / 2);
+    const maxY = Math.max(0, (scaledHeight - rect.height) / 2);
+    return { scale, x: Math.max(-maxX, Math.min(maxX, x)), y: Math.max(-maxY, Math.min(maxY, y)) };
   }
 
-  function beginCropDrag(event) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    const geometry = getCropGeometry();
-    if (!geometry) return;
+  function distance(a, b) {
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+
+  function midpoint(a, b) {
+    return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+  }
+
+  function beginImageGesture(event) {
+    if (!preview) return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: geometry.x, originY: geometry.y };
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const pointers = [...pointersRef.current.values()];
+    if (pointers.length === 1) {
+      imageDragRef.current = { mode: "pan", pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: imageTransform.x, originY: imageTransform.y };
+    } else if (pointers.length === 2) {
+      imageDragRef.current = {
+        mode: "pinch",
+        startDistance: distance(pointers[0], pointers[1]),
+        startScale: imageTransform.scale,
+        startMidpoint: midpoint(pointers[0], pointers[1]),
+        originX: imageTransform.x,
+        originY: imageTransform.y,
+      };
+    }
   }
 
-  function moveCropDrag(event) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const geometry = getCropGeometry();
-    if (!geometry) return;
-    const nextX = Math.min(0, Math.max(geometry.minX, drag.originX + event.clientX - drag.startX));
-    const nextY = Math.min(0, Math.max(geometry.minY, drag.originY + event.clientY - drag.startY));
-    setCropOffset({ x: nextX, y: nextY });
+  function moveImageGesture(event) {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    event.preventDefault();
+    pointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const pointers = [...pointersRef.current.values()];
+    const gesture = imageDragRef.current;
+    if (!gesture) return;
+    if (pointers.length >= 2 && gesture.mode === "pinch") {
+      const currentDistance = distance(pointers[0], pointers[1]);
+      const ratio = gesture.startDistance ? currentDistance / gesture.startDistance : 1;
+      const nextScale = Math.max(0.55, Math.min(3, gesture.startScale * ratio));
+      const currentMidpoint = midpoint(pointers[0], pointers[1]);
+      const next = clampTransform(nextScale, gesture.originX + currentMidpoint.x - gesture.startMidpoint.x, gesture.originY + currentMidpoint.y - gesture.startMidpoint.y);
+      setImageTransform(next);
+    } else if (pointers.length === 1 && gesture.mode === "pan") {
+      const next = clampTransform(imageTransform.scale, gesture.originX + event.clientX - gesture.startX, gesture.originY + event.clientY - gesture.startY);
+      setImageTransform(next);
+    }
   }
 
-  function endCropDrag() {
-    dragRef.current = null;
+  function endImageGesture(event) {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size === 0) imageDragRef.current = null;
+    else if (pointersRef.current.size === 1) {
+      const remaining = [...pointersRef.current.entries()][0];
+      const point = remaining[1];
+      imageDragRef.current = { mode: "pan", pointerId: remaining[0], startX: point.clientX, startY: point.clientY, originX: imageTransform.x, originY: imageTransform.y };
+    }
   }
 
-  function changeCropZoom(event) {
-    const nextZoom = Number(event.target.value);
-    const before = getCropGeometry();
-    setCropZoom(nextZoom);
-    if (!before) return;
-    const centerX = before.vw / 2;
-    const centerY = before.vh / 2;
-    const imagePointX = (centerX - before.x) / before.scale;
-    const imagePointY = (centerY - before.y) / before.scale;
-    requestAnimationFrame(() => {
-      const viewport = cropViewportRef.current;
-      const image = cropImageRef.current;
-      if (!viewport || !image?.naturalWidth) return;
-      const baseScale = Math.max(viewport.clientWidth / image.naturalWidth, viewport.clientHeight / image.naturalHeight);
-      const scale = baseScale * nextZoom;
-      const dw = image.naturalWidth * scale;
-      const dh = image.naturalHeight * scale;
-      const minX = Math.min(0, viewport.clientWidth - dw);
-      const minY = Math.min(0, viewport.clientHeight - dh);
-      const x = Math.min(0, Math.max(minX, centerX - imagePointX * scale));
-      const y = Math.min(0, Math.max(minY, centerY - imagePointY * scale));
-      setCropOffset({ x, y });
-    });
-  }
-
-  async function applyCrop() {
-    const geometry = getCropGeometry();
-    const image = cropImageRef.current;
-    if (!geometry || !image) return;
-
-    const outputWidth = 1200;
-    const outputHeight = Math.round(outputWidth * geometry.vh / geometry.vw);
-    const canvas = document.createElement("canvas");
-    canvas.width = outputWidth;
-    canvas.height = outputHeight;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    const sx = Math.max(0, -geometry.x / geometry.scale);
-    const sy = Math.max(0, -geometry.y / geometry.scale);
-    const sw = Math.min(image.naturalWidth - sx, geometry.vw / geometry.scale);
-    const sh = Math.min(image.naturalHeight - sy, geometry.vh / geometry.scale);
-    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
-
-    let blob = await canvasToBlob(canvas, 0.9);
-    if (blob.size > 460 * 1024) blob = await canvasToBlob(canvas, 0.72);
-    const dataUrl = await fileToDataUrl(new File([blob], "cropped-face.jpg", { type: "image/jpeg" }));
-    setPreview(dataUrl);
-    setImageData(dataUrl);
-    setCropOpen(false);
-    setStatus("Photo ready. Click Run Face → Web → Chain.");
-    setKind("");
-  }
-
-  function cancelCrop() {
-    setCropOpen(false);
-    setCropSource(null);
-    setStatus("Choose an image or take a photo to begin.");
+  function resetImageView() {
+    setImageTransform({ scale: 1, x: 0, y: 0 });
   }
 
   async function runPipeline() {
@@ -272,13 +240,11 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     setResult(null);
     setStatus("Detecting and encoding face…");
     setKind("");
-
     try {
       const descriptor = await getFaceDescriptor(imgRef.current);
       if (!descriptor) throw new Error("No face detected. Use a clear photo with one visible face.");
       const dHash = await descriptorHash(descriptor);
       setStatus("Searching the public web for matching images…");
-
       const res = await fetch(`${apiBase}/api/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -286,7 +252,6 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Search failed");
-
       setResult(data);
       onComplete?.(data);
       setStatus(data.evidence?.length
@@ -305,12 +270,35 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
     <div className="panel search-panel">
       <div className="upload-grid">
         <div>
-          <div className="upload-box" onClick={() => uploadInputRef.current?.click()}>
-            {preview ? <img ref={imgRef} src={preview} alt="Selected input" /> : (
+          <div
+            ref={imageBoxRef}
+            className={`upload-box ${preview ? "image-adjustable" : ""}`}
+            onPointerDown={beginImageGesture}
+            onPointerMove={moveImageGesture}
+            onPointerUp={endImageGesture}
+            onPointerCancel={endImageGesture}
+            onWheel={(event) => {
+              if (!preview) return;
+              event.preventDefault();
+              const nextScale = Math.max(0.55, Math.min(3, imageTransform.scale - event.deltaY * 0.0015));
+              setImageTransform(clampTransform(nextScale, imageTransform.x, imageTransform.y));
+            }}
+            onDoubleClick={resetImageView}
+          >
+            {preview ? (
+              <img
+                ref={imgRef}
+                className="adjustable-image"
+                src={preview}
+                alt="Selected input"
+                draggable="false"
+                style={{ transform: `translate3d(${imageTransform.x}px, ${imageTransform.y}px, 0) scale(${imageTransform.scale})` }}
+              />
+            ) : (
               <div className="upload-placeholder">
                 <span className="upload-icon">＋</span>
                 <span>Choose or capture a face photo</span>
-                <small>After selecting, you can zoom and reposition the image.</small>
+                <small>After uploading, drag or pinch directly on the image.</small>
               </div>
             )}
             <input ref={uploadInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} hidden />
@@ -321,7 +309,7 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
             <button type="button" className="capture-button camera-button" onClick={openCamera}><span className="button-icon">◉</span> Click Photo</button>
           </div>
 
-          <p className="capture-hint">Select a photo and NIGRANI will open an editor. Drag to move, use the zoom slider to resize, and choose exactly the portion you want searched.</p>
+          <p className="capture-hint">Adjust directly inside the image box: drag to move, use two fingers to zoom on mobile, or the mouse wheel on desktop. Double-click resets the view.</p>
         </div>
 
         <div className="discovery-panel">
@@ -353,43 +341,6 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
 
       <div className="row"><button className="primary big-button" onClick={runPipeline} disabled={busy || !preview}>{busy ? "PROCESSING…" : "RUN FACE → WEB → CHAIN"}</button></div>
       {status && <p className={`status-line ${kind}`}>{status}</p>}
-
-      {cropOpen && cropSource && (
-        <div className="crop-modal" role="dialog" aria-modal="true" aria-label="Adjust image crop">
-          <div className="crop-dialog">
-            <div className="camera-dialog-head">
-              <div><span className="panel-kicker">01 / IMAGE ADJUSTMENT</span><h3>Set the search area</h3></div>
-              <button type="button" className="camera-close" onClick={cancelCrop} aria-label="Close image editor">×</button>
-            </div>
-            <p className="crop-help">Drag the image to move it. Use the slider to zoom in or out. The area visible inside the frame is what NIGRANI will use for face detection and web search.</p>
-            <div
-              ref={cropViewportRef}
-              className="crop-viewport"
-              onPointerDown={beginCropDrag}
-              onPointerMove={moveCropDrag}
-              onPointerUp={endCropDrag}
-              onPointerCancel={endCropDrag}
-              onPointerLeave={(event) => { if (dragRef.current?.pointerId === event.pointerId) endCropDrag(); }}
-            >
-              <img
-                ref={cropImageRef}
-                className="crop-image"
-                src={cropSource}
-                alt="Adjustable crop"
-                draggable="false"
-                onLoad={() => setCropOffset({ x: 0, y: 0 })}
-                style={{ transform: `translate3d(${cropOffset.x}px, ${cropOffset.y}px, 0) scale(${cropZoom})` }}
-              />
-              <div className="crop-frame" aria-hidden="true"><span /><span /><span /><span /></div>
-            </div>
-            <div className="crop-controls">
-              <div className="zoom-control"><label htmlFor="crop-zoom">ZOOM <b>{cropZoom.toFixed(1)}×</b></label><input id="crop-zoom" type="range" min="1" max="3" step="0.1" value={cropZoom} onChange={changeCropZoom} /></div>
-              <span className="crop-tip">Move: drag · Zoom: slider</span>
-            </div>
-            <div className="crop-actions"><button type="button" onClick={cancelCrop}>Cancel</button><button type="button" className="primary" onClick={applyCrop}>Use This Portion</button></div>
-          </div>
-        </div>
-      )}
 
       {cameraOpen && (
         <div className="camera-modal" role="dialog" aria-modal="true" aria-label="Camera capture">
