@@ -24,23 +24,6 @@ async function lensSearch(imageId, apiKey, type) {
   return data;
 }
 
-async function googleImagesSearch(query, apiKey) {
-  const params = new URLSearchParams({
-    engine: "google_images",
-    q: query,
-    api_key: apiKey,
-    hl: "en",
-    country: "in",
-    safe: "active",
-  });
-  const response = await fetch(`${SERPAPI_URL}/search.json?${params}`);
-  const data = await response.json();
-  if (!response.ok || data.error) {
-    throw new Error(data.error || "Relevant image search failed");
-  }
-  return data;
-}
-
 function isNoResultsError(error) {
   return /no results|hasn't returned any results|did not return any results/i.test(error?.message || "");
 }
@@ -72,6 +55,8 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
     throw new Error(upload.error || "Image upload to search provider failed");
   }
 
+  // Exact and visual image search are both based on the submitted image.
+  // Never add generic keyword-image results: they can be unrelated to the input.
   const [exact, visual] = await Promise.all([
     safeLensSearch(upload.image_id, apiKey, "exact_matches"),
     safeLensSearch(upload.image_id, apiKey, "visual_matches"),
@@ -80,12 +65,16 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
   const exactData = exact.data || {};
   const visualData = visual.data || {};
 
-  const sourceItems = [
-    ...(Array.isArray(exactData.exact_matches) ? exactData.exact_matches.map(item => ({ ...item, exact_matches: true })) : []),
-    ...(Array.isArray(visualData.visual_matches) ? visualData.visual_matches : []),
-    ...(Array.isArray(visualData.organic_results) ? visualData.organic_results : []),
-    ...(Array.isArray(visualData.short_videos) ? visualData.short_videos : []),
-  ];
+  const exactItems = Array.isArray(exactData.exact_matches)
+    ? exactData.exact_matches.map(item => ({ ...item, exact_matches: true }))
+    : [];
+  const visualItems = Array.isArray(visualData.visual_matches)
+    ? visualData.visual_matches.map(item => ({ ...item, exact_matches: false }))
+    : [];
+
+  // Exact matches always come first. Visual matches are the only fallback because
+  // they are still derived from the uploaded image rather than a generic query.
+  const sourceItems = [...exactItems, ...visualItems];
 
   const seen = new Set();
   const results = [];
@@ -106,42 +95,16 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", s
     if (results.length >= 12) break;
   }
 
-  // For ordinary photos that have no indexed exact/visual Lens result, provide a
-  // small relevant-image fallback based only on the already-detected subject type.
-  // This never attempts to identify the person; it only supplies generic relevant
-  // public images so the UI can distinguish "no exact match" from "no results".
-  if (!results.length || results.filter(item => !item.exactMatch).length < 2) {
-    const normalizedSubject = String(subjectType || "person").toLowerCase();
-    const query = normalizedSubject === "person" ? "person portrait photo" : `${normalizedSubject} photo`;
-    try {
-      const imageData = await googleImagesSearch(query, apiKey);
-      const fallbackItems = Array.isArray(imageData.images_results) ? imageData.images_results : [];
-      for (const item of fallbackItems) {
-        const link = item.link || item.original || item.url;
-        if (!link || seen.has(link)) continue;
-        seen.add(link);
-        results.push({
-          title: item.title || "Relevant image",
-          link,
-          source: item.source || "Google Images",
-          thumbnail: item.thumbnail || item.original || null,
-          snippet: item.snippet || null,
-          date: null,
-          exactMatch: false,
-          matchType: "Relevant image",
-        });
-        if (results.length >= 12) break;
-      }
-    } catch (error) {
-      console.warn(`Relevant image fallback failed: ${error.message}`);
-    }
-  }
+  const exactMatchCount = exactItems.length;
+  const relevantCount = results.filter(item => !item.exactMatch).length;
 
   return {
     provider: "Google Lens via SerpApi",
     searchId: exactData.search_metadata?.id || visualData.search_metadata?.id || null,
     imageId: upload.image_id,
-    exactMatchCount: Array.isArray(exactData.exact_matches) ? exactData.exact_matches.length : 0,
+    subjectType,
+    exactMatchCount,
+    relevantCount,
     results,
     exactSearchError: exact.error || null,
     visualSearchError: visual.error || null,
