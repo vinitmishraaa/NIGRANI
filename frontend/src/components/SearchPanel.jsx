@@ -59,7 +59,7 @@ function loadImage(src) {
   });
 }
 
-export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
+export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete }) {
   const imgRef = useRef(null);
   const uploadInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -181,10 +181,10 @@ export default function SearchPanel({ apiBase, modelsReady, onComplete }) {
       }
 
       setStatus(`${subject.label} detected. Searching the public web for an exact or relevant image…`);
+      const deviceMarker = `${deviceId || "unknown"}:${dHash || "no-face"}`;
       const res = await fetch(`${apiBase}/api/search`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        // faceDetected is kept true here for compatibility with the current deployed API; living-subject detection above is the real gate.
-        body: JSON.stringify({ imageData: adjusted.dataUrl, livingDetected: true, subjectType: subject.label, faceDetected: true, actualFaceFound: faceFound, descriptorHash: dHash }),
+        body: JSON.stringify({ imageData: adjusted.dataUrl, livingDetected: true, subjectType: subject.label, faceDetected: true, actualFaceFound: faceFound, descriptorHash: deviceMarker }),
       });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Search failed");
       setResult(data); onComplete?.(data);
