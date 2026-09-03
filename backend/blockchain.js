@@ -43,15 +43,18 @@ function ensureChain(deviceId) {
   if (!Array.isArray(store[key]) || !store[key].length) { store[key] = [genesisBlock()]; saveStore(store); }
   return store[key];
 }
-function allChains() { return Object.entries(store).flatMap(([deviceId, chain]) => (Array.isArray(chain) ? chain.map(block => ({ ...block, data: { ...block.data, deviceId: block.data?.type === "genesis" ? deviceId : block.data?.deviceId || deviceId } })) : [])); }
 
-export function getChain(deviceId = null) { return deviceId ? ensureChain(deviceId) : allChains(); }
+export function getChain(deviceId = null) {
+  return deviceId ? ensureChain(deviceId) : Object.values(store).flatMap(chain => Array.isArray(chain) ? chain : []);
+}
+
 export function addBlock(data, deviceId = null) {
   const chain = ensureChain(deviceId || keyFromData(data));
   const previous = chain[chain.length - 1];
   const block = mineBlock({ index: previous.index + 1, timestamp: new Date().toISOString(), data, previousHash: previous.hash });
   chain.push(block); saveStore(store); return block;
 }
+
 function validateChain(chain) {
   for (let i = 1; i < chain.length; i++) {
     const current = chain[i], previous = chain[i - 1];
@@ -67,10 +70,17 @@ export function isChainValid(deviceId = null) {
   const broken = entries.map(([id, chain]) => ({ id, check: validateChain(chain) })).find(item => !item.check.valid);
   return broken ? { valid: false, brokenAt: broken.check.brokenAt, reason: `${broken.id}: ${broken.check.reason}` } : { valid: true };
 }
+
 export function findBlockByRecordHash(recordHash, deviceId = null) {
   if (deviceId) return ensureChain(deviceId).find(b => b.data?.recordHash === recordHash) || null;
-  return allChains().find(b => b.data?.recordHash === recordHash) || null;
+  for (const chain of Object.values(store)) {
+    if (!Array.isArray(chain)) continue;
+    const found = chain.find(b => b.data?.recordHash === recordHash);
+    if (found) return found;
+  }
+  return null;
 }
+
 export function hashRecord(record) {
   const { recordHash: _ignored, ...canonical } = record;
   return sha256(JSON.stringify(canonical));
