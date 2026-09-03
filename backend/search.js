@@ -24,6 +24,23 @@ async function lensSearch(imageId, apiKey, type) {
   return data;
 }
 
+async function googleImagesSearch(query, apiKey) {
+  const params = new URLSearchParams({
+    engine: "google_images",
+    q: query,
+    api_key: apiKey,
+    hl: "en",
+    country: "in",
+    safe: "active",
+  });
+  const response = await fetch(`${SERPAPI_URL}/search.json?${params}`);
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(data.error || "Relevant image search failed");
+  }
+  return data;
+}
+
 function isNoResultsError(error) {
   return /no results|hasn't returned any results|did not return any results/i.test(error?.message || "");
 }
@@ -32,8 +49,6 @@ async function safeLensSearch(imageId, apiKey, type) {
   try {
     return { data: await lensSearch(imageId, apiKey, type), error: null };
   } catch (error) {
-    // Google Lens can return an error for an empty Exact Matches section.
-    // That must not stop the Visual Matches fallback from running.
     if (isNoResultsError(error)) {
       return { data: {}, error: error.message };
     }
@@ -41,7 +56,7 @@ async function safeLensSearch(imageId, apiKey, type) {
   }
 }
 
-export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
+export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg", subjectType = "person") {
   const apiKey = requireKey();
   if (imageBuffer.length > 500 * 1024) {
     throw new Error("Image is larger than SerpApi's 500 KB upload limit. Use a smaller image.");
@@ -57,8 +72,6 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
     throw new Error(upload.error || "Image upload to search provider failed");
   }
 
-  // Run Exact Matches and Visual Matches independently. If Exact Matches has
-  // no result, Visual Matches still runs and becomes the fallback.
   const [exact, visual] = await Promise.all([
     safeLensSearch(upload.image_id, apiKey, "exact_matches"),
     safeLensSearch(upload.image_id, apiKey, "visual_matches"),
@@ -91,6 +104,37 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
       matchType: item.exact_matches ? "Exact match" : "Relevant visual match",
     });
     if (results.length >= 12) break;
+  }
+
+  // For ordinary photos that have no indexed exact/visual Lens result, provide a
+  // small relevant-image fallback based only on the already-detected subject type.
+  // This never attempts to identify the person; it only supplies generic relevant
+  // public images so the UI can distinguish "no exact match" from "no results".
+  if (!results.length || results.filter(item => !item.exactMatch).length < 2) {
+    const normalizedSubject = String(subjectType || "person").toLowerCase();
+    const query = normalizedSubject === "person" ? "person portrait photo" : `${normalizedSubject} photo`;
+    try {
+      const imageData = await googleImagesSearch(query, apiKey);
+      const fallbackItems = Array.isArray(imageData.images_results) ? imageData.images_results : [];
+      for (const item of fallbackItems) {
+        const link = item.link || item.original || item.url;
+        if (!link || seen.has(link)) continue;
+        seen.add(link);
+        results.push({
+          title: item.title || "Relevant image",
+          link,
+          source: item.source || "Google Images",
+          thumbnail: item.thumbnail || item.original || null,
+          snippet: item.snippet || null,
+          date: null,
+          exactMatch: false,
+          matchType: "Relevant image",
+        });
+        if (results.length >= 12) break;
+      }
+    } catch (error) {
+      console.warn(`Relevant image fallback failed: ${error.message}`);
+    }
   }
 
   return {
