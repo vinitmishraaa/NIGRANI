@@ -1,10 +1,14 @@
 import * as faceapi from "face-api.js";
-import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import * as tf from "@tensorflow/tfjs";
+import * as cocoModule from "@tensorflow-models/coco-ssd";
 
 const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
+const cocoSsd = cocoModule.default || cocoModule;
+
 let loaded = false;
 let loadingPromise = null;
 let objectModel = null;
+let faceModelsReady = false;
 
 const LIVING_CLASSES = new Set([
   "person",
@@ -24,32 +28,60 @@ const LIVING_CLASSES = new Set([
 export function loadVisionModels() {
   if (loaded) return Promise.resolve();
   if (loadingPromise) return loadingPromise;
-  loadingPromise = Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-    cocoSsd.load().then((model) => { objectModel = model; }),
-  ]).then(() => {
+
+  loadingPromise = (async () => {
+    await tf.ready();
+
+    if (typeof cocoSsd?.load !== "function") {
+      throw new Error("Living-object model could not be initialized in this browser build.");
+    }
+
+    // COCO-SSD is required for living-subject detection. Face recognition is optional.
+    objectModel = await cocoSsd.load();
+
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      ]);
+      faceModelsReady = true;
+    } catch (error) {
+      console.warn("Optional face models could not be loaded:", error);
+      faceModelsReady = false;
+    }
+
     loaded = true;
+  })().catch((error) => {
+    loadingPromise = null;
+    throw new Error(error?.message || String(error));
   });
+
   return loadingPromise;
 }
 
 export async function detectLivingSubject(mediaEl) {
-  if (!objectModel) throw new Error("Living-subject detection model is still loading.");
+  if (!objectModel) {
+    throw new Error("Living-subject detection model is unavailable. Please refresh and try again.");
+  }
+
   const predictions = await objectModel.detect(mediaEl);
   const living = predictions
     .filter((item) => LIVING_CLASSES.has(item.class) && item.score >= 0.45)
     .sort((a, b) => b.score - a.score);
+
   if (!living.length) return null;
   return { label: living[0].class, score: living[0].score };
 }
 
 export async function getFaceDescriptor(mediaEl) {
+  if (!faceModelsReady) return null;
+
   const detection = await faceapi
     .detectSingleFace(mediaEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
+
   return detection ? Array.from(detection.descriptor) : null;
 }
 
@@ -72,14 +104,18 @@ function rotr(x, n) {
 
 function sha256(bytes) {
   const K = [
-    0x428a2f98, 0x71374491, 0xb5e5dba2, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06fc, 0xc19bf174,
-    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-    0x27b70a85, 0x2e1b38, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b,
+    0x59f111f1, 0x923f82a4, 0xab1c6c5f, 0xd807aa98, 0x12835b01,
+    0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06fc,
+    0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19c6, 0x240ca1cc,
+    0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06fc, 0x19a4c116,
+    0xe49b69c1, 0xefbe4786, 0x0fc19c6, 0x240ca1cc, 0x3d7d4f12, 0x4d2c6dfc,
+    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x2748774c,
+    0x34b0cb5c, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x8cc70208, 0x90befffa, 0xa4506ceb,
+    0xbef9a3f7, 0xc67178f2,
   ];
 
   const bitLength = bytes.length * 8;
