@@ -1,9 +1,9 @@
-import * as faceapi from "face-api.js";
-import * as tf from "@tensorflow/tfjs";
+import * as faceModule from "@vladmandic/face-api";
 import * as cocoModule from "@tensorflow-models/coco-ssd";
 
-const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
+const faceapi = faceModule.default || faceModule;
 const cocoSsd = cocoModule.default || cocoModule;
+const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model";
 
 let loaded = false;
 let loadingPromise = null;
@@ -30,14 +30,12 @@ export function loadVisionModels() {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    await tf.ready();
-
     if (typeof cocoSsd?.load !== "function") {
-      throw new Error("Living-object model could not be initialized in this browser build.");
+      throw new Error("Living-object detection could not be initialized.");
     }
 
-    // COCO-SSD is required. Face recognition is optional so animal/living-object
-    // search still works even when the face models fail to download.
+    // The living-object detector is the required model. Face models load separately
+    // so a face-model problem can never block animal/living-subject searches.
     objectModel = await cocoSsd.load();
 
     try {
@@ -62,9 +60,7 @@ export function loadVisionModels() {
 }
 
 export async function detectLivingSubject(mediaEl) {
-  if (!objectModel) {
-    throw new Error("Living-subject detection model is unavailable. Please refresh and try again.");
-  }
+  if (!objectModel) throw new Error("Living-subject model is unavailable. Please refresh and try again.");
 
   const predictions = await objectModel.detect(mediaEl);
   const living = predictions
@@ -89,14 +85,10 @@ export async function getFaceDescriptor(mediaEl) {
 export async function descriptorHash(descriptor) {
   const text = JSON.stringify(descriptor);
   const input = new TextEncoder().encode(text);
-
   if (globalThis.crypto?.subtle?.digest) {
     const hash = await globalThis.crypto.subtle.digest("SHA-256", input);
     return toHex(new Uint8Array(hash));
   }
-
-  // Descriptor hash is only used as a fingerprint in the evidence record.
-  // Use a deterministic browser-safe fallback when Web Crypto is unavailable.
   return simpleHash(text);
 }
 
