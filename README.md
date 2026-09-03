@@ -1,135 +1,307 @@
-# NIGRANI
+<div align="center">
 
-> **HH Goa 2026 — Task 3**
->
-> **Web Image Search · Evidence Discovery · Blockchain Verification**
+# 👁️ NIGRANI
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-ff3b30?style=flat-square)](https://nigrani-g05v.onrender.com/)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-111111?style=flat-square&logo=github)](https://github.com/vinitmishraaa/NIGRANI)
+### Image In • Web Evidence Discovered • Integrity Verified
 
-## Overview
+<p>
+  <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=111827" alt="React" />
+  <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/SerpApi-111827?style=for-the-badge" alt="SerpApi" />
+  <img src="https://img.shields.io/badge/Google%20Lens-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Lens" />
+  <img src="https://img.shields.io/badge/SHA--256-8B0000?style=for-the-badge" alt="SHA-256" />
+  <img src="https://img.shields.io/badge/Blockchain-Evidence-111111?style=for-the-badge" alt="Blockchain Evidence" />
+</p>
 
-**NIGRANI** is an end-to-end prototype that combines local computer vision, genuine reverse-image search, public-web evidence discovery, and tamper-evident blockchain-style record verification in a single workflow.
+<i>A web-image evidence and verification prototype that combines local vision, reverse-image search, evidence fingerprinting and tamper-evident records.</i>
 
-The system is designed around a simple idea: when a user supplies an image of a supported living subject, NIGRANI first checks the image locally, searches the public web for an **exact image match** where available, falls back to **relevant visual matches** when an exact source is not found, and then fingerprints the discovered evidence so the record can be re-verified.
+<p>
+  <a href="https://nigrani-g05v.onrender.com/">🌐 Live Demo</a>
+  &nbsp;•&nbsp;
+  <a href="https://github.com/vinitmishraaa/NIGRANI">💻 GitHub</a>
+</p>
 
-NIGRANI is focused on **image provenance and public-web evidence discovery**. It is not a people registry and does not return a person's name or identity from an arbitrary face.
+</div>
 
-## Live Demo
+---
 
-**Website:** https://nigrani-g05v.onrender.com/
+## 🚀 About NIGRANI
 
-**GitHub:** https://github.com/vinitmishraaa/NIGRANI
+**NIGRANI** is an image-evidence discovery and verification system built for **HH Goa 2026 — Task 3**.
 
-## Core Workflow
+The project takes a submitted image, validates that it contains a supported living subject, performs a genuine reverse-image search, prioritises exact public-image matches when available, collects relevant public-web evidence, and creates a tamper-evident record that can be verified later.
+
+The goal is **provenance and evidence discovery**, not person identification.
+
+NIGRANI does not maintain a people registry and does not attempt to infer or return a person's identity from an arbitrary face.
+
+## 🌐 Live
+
+| Resource | Link |
+|---|---|
+| 🌐 **Live Website** | https://nigrani-g05v.onrender.com/ |
+| 💻 **GitHub Repository** | https://github.com/vinitmishraaa/NIGRANI |
+| ⚙️ **Backend API** | https://nigrani-backend-8bfx.onrender.com |
+
+## ✨ Key Features
+
+| Feature | Description |
+|---|---|
+| 📷 **Upload / Camera Input** | Upload an image or capture one directly from the browser. |
+| 🖼️ **Direct Image Adjustment** | Reposition and zoom the image inside the main upload box without a separate crop editor. |
+| 🧠 **Living-Subject Detection** | Local computer vision checks for supported living subjects before web search. |
+| 👤 **Optional Face Processing** | Human images can receive local face detection/encoding when a visible face is available. |
+| 🔎 **Reverse Image Search** | Uses SerpApi + Google Lens for real public-web image discovery. |
+| 🎯 **Exact-Match Priority** | Exact public image matches are surfaced before visual/relevant matches. |
+| 🌐 **Visual Fallback** | Relevant visual sources are returned when an exact match is unavailable. |
+| 🔐 **Evidence Fingerprinting** | Search evidence is hashed with SHA-256 to create a stable record fingerprint. |
+| ⛓️ **Tamper-Evident Chain** | Records are stored in hash-linked blocks with proof of work and chain validation. |
+| ✅ **Re-Verification** | Stored fingerprints and evidence integrity can be checked again after search. |
+| 📱 **Device-Scoped Explorer** | The demo is designed to keep explorer records separated by browser/device identity. |
+| ⛓️ **Optional EVM Anchor** | The generated fingerprint can optionally be anchored to an EVM-compatible testnet. |
+
+## 🧩 How It Works
 
 ```text
-Upload / Camera
-      ↓
-Direct image adjustment in the upload box
-      ↓
-Local living-subject detection
-      ↓
-Human face encoding when a visible face is available
-      ↓
-Genuine reverse-image search
-      ↓
-Exact public image match (priority)
-      ↓
-Relevant visual/public sources (fallback)
-      ↓
-Evidence record + SHA-256 fingerprint
-      ↓
-Tamper-evident blockchain-style block
-      ↓
-Re-verification of fingerprint + chain integrity
+📷 Upload / Camera
+        ↓
+🖼️ Direct image adjustment
+        ↓
+🧠 Living-subject detection
+        ↓
+👤 Face processing (human images, when available)
+        ↓
+🔎 Reverse-image search
+        ↓
+🎯 Exact public-image match
+        ↓
+🌐 Visual / relevant sources
+        ↓
+🔐 Evidence record + SHA-256 fingerprint
+        ↓
+⛓️ Hash-linked blockchain-style block
+        ↓
+✅ Re-verification
+        ↓
+📊 Evidence + integrity status
 ```
 
-## Key Features
+## 🎯 What NIGRANI Actually Verifies
 
-### 1. Direct image adjustment
+NIGRANI works with the **image and its public-web evidence**.
 
-The uploaded image stays inside the main image box. The user can adjust it directly without opening a separate crop editor.
+It can answer questions such as:
 
-- Drag to reposition the image.
-- Pinch with two fingers on mobile to zoom.
-- Use the mouse wheel on desktop to zoom.
-- The full image remains available with black letterbox space when aspect ratios differ.
-- The adjusted view is rendered into the actual image sent for detection/search.
+```text
+Was this image found publicly on the web?
+        ↓
+Where was the matching/relevant image indexed?
+        ↓
+Was an exact image match available?
+        ↓
+What evidence was recorded for this search?
+        ↓
+Has that stored evidence remained consistent?
+```
 
-### 2. Living-subject detection
+It does **not** claim that a reverse-image result proves identity, ownership, authorship or authenticity by itself.
 
-NIGRANI does not require a human face for every search.
+## 🔎 Reverse-Image Search Strategy
 
-Supported living-subject categories currently include classes such as:
+NIGRANI performs two search modes for each prepared image:
 
-`person`, `bird`, `cat`, `dog`, `horse`, `sheep`, `cow`, `elephant`, `bear`, `zebra`, `giraffe`, and `potted plant`.
+```text
+                    Image Upload
+                         ↓
+              ┌──────────┴──────────┐
+              ↓                     ↓
+       Exact Matches          Visual Matches
+              ↓                     ↓
+              └──────────┬──────────┘
+                         ↓
+                   Merge + Deduplicate
+                         ↓
+              Exact results first
+                         ↓
+               Visual fallback after
+```
 
-For a **person**, the system additionally attempts local face detection/encoding when a face is visible. For supported animal/living-object images, web discovery can proceed without face encoding.
+The result cards distinguish between:
 
-A non-living object is rejected locally instead of being sent through the living-subject search flow.
+- **Exact image** — the provider exposed the image as an exact match.
+- **Visual match** — the provider found a visually relevant source.
 
-### 3. Exact-match-first web discovery
+The search provider's index determines what can be discovered. A public page existing online does not guarantee that it will appear in search results.
 
-NIGRANI uses a genuine reverse-image search backend. Results are prioritised so that exact public image matches are shown first whenever the search provider exposes them.
+## 🧠 Local Vision Layer
 
-When an exact match is unavailable, the system falls back to visually relevant public-web sources.
+The browser performs local validation before sending the image to the backend search pipeline.
 
-The UI labels results as either:
+The current detector is built around **TensorFlow.js + COCO-SSD** for supported living-subject classes.
 
-- **exact image**
-- **visual match**
+Current supported categories include classes such as:
 
-Each displayed source includes the title, source, thumbnail when available, and a link to open the source page.
+```text
+person
+bird
+cat
+ dog
+horse
+sheep
+cow
+elephant
+bear
+zebra
+giraffe
+potted plant
+```
 
-### 4. Evidence fingerprinting
+For human images, NIGRANI can additionally attempt face processing when a visible face is present.
 
-For every search, NIGRANI creates an evidence record containing the image hash, subject information, search metadata, and selected source metadata.
+This local gate prevents ordinary non-living objects from being treated as valid living-subject evidence submissions.
 
-The record is fingerprinted with SHA-256:
+## 🔐 Evidence Fingerprinting
+
+Every completed search produces a structured evidence record containing information such as:
+
+```text
+Image hash
+Subject type
+Face-processing status
+Search metadata
+Exact-match count
+Result count
+Selected evidence metadata
+Timestamp
+```
+
+The record is then fingerprinted with SHA-256:
 
 ```text
 recordHash = SHA256(JSON(record))
 ```
 
-A block then links that record to the previous block through another SHA-256 hash and a simple proof-of-work requirement:
+This gives the evidence record a deterministic integrity fingerprint.
+
+## ⛓️ Tamper-Evident Blockchain-Style Chain
+
+NIGRANI links evidence records into a simple local chain.
+
+```text
+Block N
+   │
+   ├── index
+   ├── timestamp
+   ├── evidence record
+   ├── recordHash
+   ├── previousHash
+   └── nonce
+          ↓
+      blockHash
+          ↓
+        Block N+1
+```
+
+Block hashes are derived from the block contents and the previous block hash:
 
 ```text
 blockHash = SHA256(index | timestamp | JSON(data) | previousHash | nonce)
 ```
 
-### 5. Evidence re-verification
+A proof-of-work requirement is used to make block creation deterministic and to provide a simple tamper-evident chain demonstration.
 
-After a search completes, the application re-checks:
+## ✅ Evidence Re-Verification
 
-- stored record fingerprint,
-- reconstructed/canonical fingerprint,
-- evidence consistency,
-- chain integrity.
+NIGRANI can verify a previously created evidence record by checking:
 
-A successful re-check is displayed as **VERIFIED**.
+```text
+Stored record hash
+        ↓
+Reconstructed fingerprint
+        ↓
+Evidence consistency
+        ↓
+Chain integrity
+        ↓
+VERIFIED / FAILED
+```
 
-### 6. Device-specific blockchain explorer
+A successful verification means the stored record and its chain relationships remain consistent with the recorded fingerprint at verification time.
 
-The demo maintains separate explorer views for different browser/device identities instead of presenting every device's evidence in one shared UI.
+## 📊 Blockchain Explorer
 
-The explorer is intentionally compact:
+The application includes a compact evidence explorer for the generated local records.
 
-- latest **10 records** are shown first;
-- older records can be expanded with **Show all**;
-- the list can be collapsed back to the latest 10 records.
+The intended UI behaviour is:
 
-### 7. Optional public-chain anchoring
+```text
+Latest 10 records
+       ↓
+   Show all
+       ↓
+Older records
+```
 
-The project can optionally anchor the generated record fingerprint to an EVM-compatible testnet when the required environment variables are configured.
+The explorer is kept separate from the web-search results so that **public evidence discovery** and **local integrity records** remain distinct parts of the workflow.
 
-Without those credentials, the prototype continues to use its local tamper-evident chain.
+## 🏗️ Architecture
 
-## Architecture
+```text
+                         ┌─────────────────────────┐
+                         │      React + Vite       │
+                         │       Frontend          │
+                         └────────────┬────────────┘
+                                      │
+                               Image / Camera
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │   Local Vision Layer    │
+                         │ TensorFlow.js + COCO    │
+                         │        -SSD             │
+                         └────────────┬────────────┘
+                                      │
+                                      ▼
+                         ┌─────────────────────────┐
+                         │      Express API        │
+                         │       Backend           │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────┼────────────┐
+                         ▼            ▼            ▼
+                    Image Search   Evidence    Chain Logic
+                         │          Record          │
+                         ▼            │              ▼
+                SerpApi / Lens      SHA-256   Hash-linked Blocks
+                         │            │              │
+                         └────────────┴──────────────┘
+                                      │
+                                      ▼
+                              Verification Result
+```
+
+## 🧰 Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React + Vite |
+| Vision | TensorFlow.js + COCO-SSD |
+| Human Face Processing | Face-api-compatible browser models |
+| Backend | Node.js + Express |
+| Reverse Image Search | SerpApi Image API + Google Lens |
+| Evidence Hashing | SHA-256 |
+| Chain | Local hash-linked blocks + proof of work |
+| Optional Public Anchor | EVM-compatible testnet + ethers.js |
+| Deployment | Render |
+
+## 📁 Repository Structure
 
 ```text
 NIGRANI/
 ├── frontend/
+│   ├── public/
+│   │   ├── manifest.webmanifest
+│   │   └── nigrani-eye.svg
 │   ├── src/
 │   │   ├── App.jsx
 │   │   ├── faceEngine.js
@@ -139,9 +311,6 @@ NIGRANI/
 │   │       ├── Footer.jsx
 │   │       ├── SearchPanel.jsx
 │   │       └── ChainExplorer.jsx
-│   ├── public/
-│   │   ├── manifest.webmanifest
-│   │   └── nigrani-eye.svg
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.js
@@ -151,67 +320,36 @@ NIGRANI/
     ├── search.js
     ├── blockchain.js
     ├── onchain.js
-    ├── package.json
-    └── chain-data.json
+    ├── chain-data.json
+    └── package.json
 ```
 
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React + Vite |
-| Living-subject detection | TensorFlow.js + COCO-SSD |
-| Human face processing | face-api-compatible browser models |
-| Backend | Node.js + Express |
-| Reverse-image search | SerpApi Image API + Google Lens |
-| Evidence hashing | SHA-256 |
-| Chain mechanism | Local hash-linked blocks + proof of work |
-| Optional blockchain | EVM testnet via ethers.js |
-| Deployment | Render |
-
-## Project Structure
-
-### Frontend
-
-`App.jsx` coordinates model loading, API communication, evidence verification, and the blockchain explorer.
-
-`SearchPanel.jsx` handles image upload/camera capture, direct image manipulation, local living-subject detection, optional face encoding, reverse-image search requests, and result display.
-
-`faceEngine.js` loads the browser vision models and exposes living-subject detection plus human face descriptor generation.
-
-`ChainExplorer.jsx` displays the device-specific blockchain-style evidence records.
-
-`styles.css` contains the red/black NIGRANI interface, responsive layout, image manipulation UI, and verification states.
-
-### Backend
-
-`server.js` exposes the API endpoints for search, evidence re-verification, health checks, and chain access.
-
-`search.js` uploads the image and performs exact-match and visual-match reverse-image discovery.
-
-`blockchain.js` manages device-scoped chains, block creation, SHA-256 hashing, proof-of-work, and chain validation.
-
-`onchain.js` contains the optional EVM testnet anchoring layer.
-
-## API Endpoints
+## ⚙️ Backend API
 
 ### `GET /api/health`
 
-Returns service status and whether search/on-chain configuration is available.
+Returns backend health and configuration status.
 
 ### `POST /api/search`
 
-Accepts the prepared image plus detected subject metadata, performs reverse-image search, creates an evidence record, and appends a block to the device-scoped chain.
+Accepts the prepared image and local subject metadata, performs reverse-image search, creates an evidence record and appends it to the chain.
 
 ### `POST /api/verify-evidence`
 
-Reconstructs the record fingerprint, compares the stored fingerprint, checks evidence consistency, and validates chain integrity.
+Reconstructs the stored fingerprint, checks evidence consistency and validates the chain.
 
 ### `GET /api/chain`
 
-Returns the current device-scoped chain and chain validity information.
+Returns chain records and chain validation information for the explorer.
 
-## Local Setup
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js
+- npm
+- A SerpApi API key
+- A modern browser with camera support when using **Click Photo**
 
 ### 1. Clone the repository
 
@@ -227,20 +365,20 @@ cd backend
 npm install
 ```
 
-Create a `.env` file:
+Create `backend/.env`:
 
 ```env
-SERPAPI_API_KEY=your_serpapi_key
+SERPAPI_API_KEY=your_serpapi_api_key
 ```
 
-Optional EVM configuration:
+Optional public-chain configuration:
 
 ```env
 RPC_URL=your_rpc_url
 PRIVATE_KEY=your_private_key
 ```
 
-Start the API:
+Start the backend:
 
 ```bash
 npm run dev
@@ -248,7 +386,7 @@ npm run dev
 
 ### 3. Start the frontend
 
-In a second terminal:
+In another terminal:
 
 ```bash
 cd frontend
@@ -256,75 +394,114 @@ npm install
 npm run dev
 ```
 
-Open:
+Open the local Vite URL shown in the terminal.
+
+## 🧪 Using the Demo
 
 ```text
-http://localhost:5173
+1. Upload an image or click Photo
+2. Adjust the image inside the upload box
+3. Run the NIGRANI pipeline
+4. Local vision validates the subject
+5. Reverse-image search discovers public evidence
+6. Exact matches are prioritised
+7. Evidence is fingerprinted
+8. A chain block is created
+9. NIGRANI re-verifies the record
+10. Explore the stored evidence in the chain section
 ```
 
-## Usage
+## 🔐 Security Notes
 
-1. Upload an image or use **Click Photo**.
-2. Adjust the image directly inside the image box when required.
-3. Click **RUN FACE → WEB → CHAIN**.
-4. NIGRANI checks whether a supported living subject is present.
-5. Human images may receive face encoding when a visible face is available.
-6. The backend performs a genuine reverse-image search.
-7. Exact public image matches are prioritised; otherwise relevant visual matches are returned.
-8. The selected evidence is fingerprinted and added to the device-specific chain.
-9. The application re-verifies the evidence and displays the result.
+Keep all credentials on the backend/server side.
 
-## Deployment
+Do not commit:
 
-The current demo deployment uses Render.
+```text
+.env
+API keys
+private keys
+node_modules/
+```
 
-Frontend:
+The reverse-image provider should be treated as an evidence-discovery service, not as an authority that automatically proves authenticity or identity.
 
-`https://nigrani-g05v.onrender.com/`
+## ⚠️ Limitations
 
-Backend:
+- Search coverage depends on the provider's indexed web content.
+- Exact matches are not guaranteed for every public image or social-media post.
+- Private, deleted, login-gated or unindexed pages may not be discoverable.
+- Local vision is limited to the classes supported by the configured model.
+- Face processing is a prototype browser capability, not forensic identification.
+- The local blockchain-style chain is a tamper-evident demonstration mechanism rather than a decentralised public blockchain by itself.
+- Public EVM persistence requires separate testnet configuration and credentials.
 
-`https://nigrani-backend-8bfx.onrender.com`
+## 🔮 Future Scope
 
-For production deployments, keep API secrets on the backend/server environment rather than exposing them in frontend code.
+NIGRANI can be extended with:
 
-## Design
+- 🌐 More search providers for cross-engine evidence comparison.
+- 🧩 Stronger evidence clustering and source correlation.
+- 📸 Perceptual hashes for near-duplicate image detection.
+- 🕒 Historical source snapshots and timeline reconstruction.
+- ⛓️ Public-chain anchoring for long-term integrity proofs.
+- 📊 Confidence scoring across multiple independent evidence sources.
+- 🧪 Automated evaluation datasets for reverse-image retrieval quality.
+- ☁️ Persistent database-backed storage for production deployments.
+- 🛡️ Stronger privacy controls and configurable retention policies.
 
-NIGRANI uses a minimal **black + red** visual language with:
+### 🎯 Long-Term Vision
 
-- NIGRANI branding;
-- red eye mark;
-- responsive layout;
-- mobile-friendly camera flow;
-- direct image manipulation inside the upload area;
-- compact evidence cards;
-- blockchain-style evidence explorer;
-- PWA/web-shortcut metadata using the NIGRANI name and eye icon.
+```text
+Capture
+  ↓
+Detect
+  ↓
+Discover
+  ↓
+Correlate
+  ↓
+Fingerprint
+  ↓
+Verify
+  ↓
+Preserve Evidence
+```
 
-## Limitations
+## 📌 Task Context
 
-- Reverse-image search quality depends on the search provider's indexed coverage. A public page existing online does not guarantee that it will be returned by the provider.
-- Exact image matches are not guaranteed for every public social-media post.
-- The local living-subject detector is limited to its configured model classes.
-- Face encoding is a prototype capability and is not forensic identification.
-- The prototype does not maintain a people registry and does not infer a person's name from an uploaded face.
-- Social-media pages may be blocked, login-gated, deleted, private, or absent from public search indexes.
-- The local chain is a demonstration chain. Optional EVM anchoring is required for public-chain persistence.
+**HH Goa 2026 — Task 3**
 
-## Security Notes
+NIGRANI demonstrates a compact end-to-end prototype connecting:
 
-- Keep `SERPAPI_API_KEY`, `RPC_URL`, and `PRIVATE_KEY` out of frontend source code.
-- Do not commit `.env` files or private keys.
-- Treat reverse-image matches as evidence sources, not as proof of authorship, ownership, or identity.
+```text
+Local Vision
+     +
+Reverse Image Search
+     +
+Public Web Evidence
+     +
+Cryptographic Fingerprinting
+     +
+Tamper-Evident Records
+```
 
-## Task Context
+The project is intentionally focused on **image provenance and evidence verification**, with identity inference kept outside the system's scope.
 
-**HH Goa 2026 — Task 3** focuses on demonstrating a working pipeline for image/face processing, web evidence discovery, and blockchain-backed evidence verification.
+---
 
-NIGRANI implements that flow as a compact prototype with a real reverse-image search integration and a tamper-evident evidence record layer.
+<div align="center">
 
-## Author
+### 👁️ NIGRANI
+
+<i>Observe • Discover • Fingerprint • Verify</i>
+
+<p>
+  <a href="https://nigrani-g05v.onrender.com/">🌐 Live Demo</a>
+  &nbsp;•&nbsp;
+  <a href="https://github.com/vinitmishraaa/NIGRANI">💻 GitHub</a>
+</p>
 
 **B&D by Vinit Mishra**
 
-GitHub: https://github.com/vinitmishraaa/NIGRANI
+</div>
