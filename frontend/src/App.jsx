@@ -35,18 +35,25 @@ export default function App() {
     <div className="app">
       <Header />
       <div className="notice">
-        <strong>Pipeline:</strong> subject detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
+        <strong>Pipeline:</strong> face detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
       {modelError && <div className="config-warning">Vision model error: {modelError}</div>}
       <section className="hero-section">
         <div className="section-head"><span className="section-num">01</span><h2>Web image search &amp; evidence</h2></div>
-        <p className="section-desc">Upload a person or supported living-being image. Nigrani detects the subject locally, uses face encoding when a human face is visible, searches the public web for exact or relevant image matches, and records the discovered evidence.</p>
-        <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} deviceId={deviceId} onComplete={(data) => { setResult(data); setChainRefresh(n => n + 1); }} />
+        <p className="section-desc">Upload a human image. Nigrani requires a visible face before any web search is allowed, then searches the public web for exact or relevant image matches and records only returned evidence.</p>
+        <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} deviceId={deviceId} onComplete={(data) => {
+          if (data?.matched && data?.evidence?.length && data?.recordHash) {
+            setResult(data);
+            setChainRefresh(n => n + 1);
+          } else {
+            setResult(null);
+          }
+        }} />
       </section>
       {result && (
         <section className="section">
           <div className="section-head"><span className="section-num">02</span><h2>Evidence fingerprint</h2></div>
-          <p className="section-desc">Each discovered source is turned into an evidence record, fingerprinted with SHA-256, and written to the tamper-evident chain. Optional EVM testnet anchoring can store the same fingerprint in a public transaction.</p>
+          <p className="section-desc">Only a successful web match creates an evidence record, SHA-256 fingerprint, and blockchain block. A no-match search is never shown as verified.</p>
           <EvidenceVerification apiBase={API_BASE} result={result} deviceId={deviceId} />
         </section>
       )}
