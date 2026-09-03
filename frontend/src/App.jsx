@@ -35,12 +35,12 @@ export default function App() {
     <div className="app">
       <Header />
       <div className="notice">
-        <strong>Pipeline:</strong> face detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
+        <strong>Pipeline:</strong> human face or animal detected locally → public web image search → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
       {modelError && <div className="config-warning">Vision model error: {modelError}</div>}
       <section className="hero-section">
         <div className="section-head"><span className="section-num">01</span><h2>Web image search &amp; evidence</h2></div>
-        <p className="section-desc">Upload a human image. Nigrani requires a visible face before any web search is allowed, then searches the public web for exact or relevant image matches and records only returned evidence.</p>
+        <p className="section-desc">Upload a human or supported animal image. Nigrani first detects a visible human face or supported animal locally. Only those two subject types are allowed to proceed to public web image search; unrelated objects are rejected.</p>
         <SearchPanel apiBase={API_BASE} modelsReady={modelsReady} deviceId={deviceId} onComplete={(data) => {
           if (data?.matched && data?.evidence?.length && data?.recordHash) {
             setResult(data);
