@@ -10,6 +10,8 @@ const ANIMAL_CLASSES = new Set([
   "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe",
 ]);
 
+const ANIMAL_SCORE_THRESHOLD = 0.60;
+
 let loaded = false;
 let loadingPromise = null;
 let animalModel = null;
@@ -53,12 +55,31 @@ export function loadVisionModels() {
   return loadingPromise;
 }
 
+function getBestAnimal(predictions) {
+  return predictions
+    .filter((item) => ANIMAL_CLASSES.has(item.class) && Number(item.score) >= ANIMAL_SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score)[0] || null;
+}
+
+function createFlippedCanvas(mediaEl) {
+  const canvas = document.createElement("canvas");
+  const width = mediaEl.naturalWidth || mediaEl.videoWidth || mediaEl.width;
+  const height = mediaEl.naturalHeight || mediaEl.videoHeight || mediaEl.height;
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(mediaEl, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 export async function detectLivingSubject(mediaEl) {
   if (!loaded || !animalModel) {
     throw new Error("Vision models are unavailable. Please refresh and try again.");
   }
 
-  // Human: require an actual visible face.
+  // Humans: require an actual visible human face.
   if (faceModelsReady) {
     try {
       const face = await faceapi.detectSingleFace(
@@ -69,22 +90,32 @@ export async function detectLivingSubject(mediaEl) {
         return { label: "person", score: face.score, kind: "human", faceDetected: true };
       }
     } catch (_) {
-      // Continue to animal detection.
+      // Continue to the animal-only path.
     }
   }
 
-  // Animals: COCO-SSD detects the animal subject directly; a human face model is
-  // not required for the animal path. This covers dogs, cats and other supported animals.
-  const predictions = await animalModel.detect(mediaEl, 20, 0.35);
-  const animal = predictions
-    .filter((item) => ANIMAL_CLASSES.has(item.class) && Number(item.score) >= 0.45)
-    .sort((a, b) => b.score - a.score)[0];
+  // Animals: require the same supported animal class to be detected confidently
+  // in both the original image and a horizontally flipped copy. This reduces
+  // single-frame false positives such as a black-hole/landscape being labeled as cat.
+  const originalPredictions = await animalModel.detect(mediaEl, 20, 0.20);
+  const originalAnimal = getBestAnimal(originalPredictions);
+  if (!originalAnimal) return null;
 
-  if (animal) {
-    return { label: animal.class, score: animal.score, kind: "animal", faceDetected: false };
-  }
+  const flippedCanvas = createFlippedCanvas(mediaEl);
+  const flippedPredictions = await animalModel.detect(flippedCanvas, 20, 0.20);
+  const flippedAnimal = getBestAnimal(flippedPredictions);
 
-  return null;
+  if (!flippedAnimal || flippedAnimal.class !== originalAnimal.class) return null;
+
+  const combinedScore = (Number(originalAnimal.score) + Number(flippedAnimal.score)) / 2;
+  if (combinedScore < 0.65) return null;
+
+  return {
+    label: originalAnimal.class,
+    score: combinedScore,
+    kind: "animal",
+    faceDetected: false,
+  };
 }
 
 export async function getFaceDescriptor(mediaEl) {
