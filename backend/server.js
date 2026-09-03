@@ -48,19 +48,16 @@ app.post("/api/search", async (req, res) => {
     const { imageData, subjectType, faceDetected, descriptorHash } = req.body;
     if (!imageData) return res.status(400).json({ error: "imageData is required" });
 
-    // Face detection is a hard gate. The server must never perform a reverse-image
-    // search for an image that was not confirmed to contain a visible face locally.
     if (!faceDetected) return res.status(400).json({ error: "No face detected" });
 
     const { mimeType, buffer } = parseDataUrl(imageData);
     if (buffer.length === 0) return res.status(400).json({ error: "Empty image" });
 
     const imageHash = sha256(buffer);
-    const search = await reverseSearchImage(buffer, mimeType);
+    const search = await reverseSearchImage(buffer, mimeType, subjectType || "person");
 
     const evidence = search.results.slice(0, 3).map(normalizeEvidence);
 
-    // A zero-result search is not evidence. Do not create a fingerprint or block.
     if (!evidence.length) {
       return res.json({
         success: true,
