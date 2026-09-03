@@ -24,6 +24,23 @@ async function lensSearch(imageId, apiKey, type) {
   return data;
 }
 
+function isNoResultsError(error) {
+  return /no results|hasn't returned any results|did not return any results/i.test(error?.message || "");
+}
+
+async function safeLensSearch(imageId, apiKey, type) {
+  try {
+    return { data: await lensSearch(imageId, apiKey, type), error: null };
+  } catch (error) {
+    // Google Lens can return an error for an empty Exact Matches section.
+    // That must not stop the Visual Matches fallback from running.
+    if (isNoResultsError(error)) {
+      return { data: {}, error: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
   const apiKey = requireKey();
   if (imageBuffer.length > 500 * 1024) {
@@ -40,12 +57,15 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
     throw new Error(upload.error || "Image upload to search provider failed");
   }
 
-  // Run the dedicated Exact Matches search first. If no exact source exists,
-  // broaden the search to Visual Matches and return the most relevant public sources.
-  const [exactData, visualData] = await Promise.all([
-    lensSearch(upload.image_id, apiKey, "exact_matches"),
-    lensSearch(upload.image_id, apiKey, "visual_matches"),
+  // Run Exact Matches and Visual Matches independently. If Exact Matches has
+  // no result, Visual Matches still runs and becomes the fallback.
+  const [exact, visual] = await Promise.all([
+    safeLensSearch(upload.image_id, apiKey, "exact_matches"),
+    safeLensSearch(upload.image_id, apiKey, "visual_matches"),
   ]);
+
+  const exactData = exact.data || {};
+  const visualData = visual.data || {};
 
   const sourceItems = [
     ...(Array.isArray(exactData.exact_matches) ? exactData.exact_matches.map(item => ({ ...item, exact_matches: true })) : []),
@@ -79,5 +99,7 @@ export async function reverseSearchImage(imageBuffer, mimeType = "image/jpeg") {
     imageId: upload.image_id,
     exactMatchCount: Array.isArray(exactData.exact_matches) ? exactData.exact_matches.length : 0,
     results,
+    exactSearchError: exact.error || null,
+    visualSearchError: visual.error || null,
   };
 }
