@@ -171,7 +171,7 @@ export default function SearchPanel({ apiBase, modelsReady, deviceId, onComplete
       setStatus("Checking for a human face or supported animal…");
       const adjusted = await renderAdjustedImage();
       const subject = await detectLivingSubject(adjusted.image);
-      if (!subject) throw new Error("No face detected. Upload a human face or supported animal image.");
+      if (!subject) throw new Error("No face detected. Please enter a supported image.");
 
       let dHash = null; let faceFound = false;
       if (subject.kind === "human") {
