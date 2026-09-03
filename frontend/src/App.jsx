@@ -9,11 +9,16 @@ const API_BASE = import.meta.env.VITE_API_BASE || "https://nigrani-backend-8bfx.
 
 export default function App() {
   const [modelsReady, setModelsReady] = useState(false);
+  const [modelError, setModelError] = useState("");
   const [result, setResult] = useState(null);
   const [chainRefresh, setChainRefresh] = useState(0);
 
   useEffect(() => {
-    loadVisionModels().then(() => setModelsReady(true)).catch(console.error);
+    let active = true;
+    loadVisionModels()
+      .then(() => { if (active) setModelsReady(true); })
+      .catch((error) => { if (active) setModelError(error?.message || "Vision models could not be loaded."); });
+    return () => { active = false; };
   }, []);
 
   return (
@@ -22,6 +27,7 @@ export default function App() {
       <div className="notice">
         <strong>Pipeline:</strong> living subject detected locally → image searched on the public web → exact/relevant sources captured → evidence fingerprinted → blockchain re-verified.
       </div>
+      {modelError && <div className="config-warning">Vision model error: {modelError}</div>}
 
       <section className="hero-section">
         <div className="section-head"><span className="section-num">01</span><h2>Living subject & web evidence</h2></div>
